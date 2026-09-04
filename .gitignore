@@ -1,0 +1,34 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Virtual Environment
+backend/venv/
+
+# Django
+*.log
+media/
+staticfiles/
+
+# Environment Variables
+.env
+
+# VS Code
+.vscode/
+
+# React
+frontend/node_modules/
+frontend/build/
+frontend/dist/
+
+# Windows
+Thumbs.db
+
+# Python Tool Cache
+.pytest_cache/
+.mypy_cache/
+
+# Coverage Reports
+.coverage
+htmlcov/
