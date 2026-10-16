@@ -3,6 +3,8 @@ import uuid
 from django.utils.text import slugify
 class Category(models.Model):
     id=models.UUIDField(primary_key=True,default=uuid.uuid4,editable=False)
+    parent=models.ForeignKey("self",on_delete=models.PROTECT,null=True,blank=True,related_name="children")
+
     name=models.CharField(max_length=100,unique=True)
     slug=models.SlugField(unique=True,blank=True)
 
