@@ -56,7 +56,7 @@ class CartItemAdd(APIView):
         cart_item,item_created=CartItem.objects.get_or_create(
             cart=cart,
             product=product,
-            quantity={"quantity":quantity}
+            defaults={"quantity":quantity}
         )
         if not item_created:
             cart_item.quantity+=quantity
@@ -64,6 +64,66 @@ class CartItemAdd(APIView):
 
         return Response(
             CartSerializer(cart).data,
-            status=status.HTTP_200_ok if not item_created else status.HTTP_201_CREATED
+            status=status.HTTP_200_OK if not item_created else status.HTTP_201_CREATED
 
         )
+
+class CartItemUpdate(APIView):
+    permission_classes=[IsAuthenticated]
+    def patch(self,request,item_id):
+        try:
+            quantity=int(request.data.get("quantity"))
+        except (TypeError,ValueError):
+            return Response(
+                {"error":"Quantity must be a whole number."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if quantity <1:
+            return Response(
+                {"error":"Quantity must be at least 1."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            cart=Cart.objects.get(user=request.user)
+            cart_item=CartItem.objects.get(
+                id=item_id,
+                cart=cart
+            )
+        except (Cart.DoesNotExist,CartItem.DoesNotExist):
+            return Response(
+                {"error":"Cart item not found"},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        cart_item.quantity=quantity
+        cart_item.save(update_fields=["quantity"])
+
+        return Response(
+            CartSerializer(cart).data,
+            status=status.HTTP_200_OK
+        )
+    def delete(self,request,item_id):
+            try:
+                cart=Cart.objects.get(user=request.user)
+                cart_item=CartItem.objects.get(
+                    id=item_id,
+                    cart=cart
+                )
+            except (Cart.DoesNotExist,CartItem.DoesNotExist):
+                return Response(
+                    {"error":"Cart item not found."},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+            cart_item.delete()
+            return Response(
+                {"message": "Item removed from cart successfully."},
+                status=status.HTTP_200_OK,
+            )
+    
+    
+            
+# class CartItemDelete(APIView):
+#     permissions_classes=[IsAuthenticated]
+    
