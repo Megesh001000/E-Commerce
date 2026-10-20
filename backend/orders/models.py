@@ -37,6 +37,9 @@ class Order(models.Model):
     stock_reserved=models.BooleanField(default=False)
     created_at=models.DateTimeField(auto_now_add=True)
     updated_at=models.DateTimeField(auto_now=True)
+    razorpay_order_id=models.CharField(max_length=100,blank=True,null=True,unique=True)
+    razorpay_payment_id=models.CharField(max_length=100,blank=True,null=True,unique=True)
+    payment_status=models.CharField(max_length=20,default="pending")
 
     def __str__(self):
         return f"Order {self.id} - {self.user}"
@@ -65,3 +68,14 @@ class OrderItem(models.Model):
     @property
     def sub_total(self):
         return self.price * self.quantity
+
+class WebhookEvent(models.Model):
+    event_id=models.CharField(max_length=100,unique=True)
+    event_type=models.CharField(max_length=100)
+    payload=models.JSONField()
+    processed=models.BooleanField(default=False)
+    received_at=models.DateTimeField(auto_now_add=True)
+    processed_at=models.DateTimeField(null=True,blank=True)
+
+    def  __str__(self):
+        return f"{self.event_type} - {self.event_id}"
