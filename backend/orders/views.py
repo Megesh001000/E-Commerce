@@ -19,13 +19,13 @@ from .serializers import OrderSerializer,OrderItemSerializer
 from .services import create_razorpay_order,get_razorpay_client
 
 class CheckOutView(APIView):
-    permissions_classes=[IsAuthenticated]
+    permission_classes=[IsAuthenticated]
 
     @transaction.atomic
     def post(self,request):
 
         try:
-            cart=Cart.objects.get(user=request.user)
+            cart=Cart.objects.select_for_update().get(user=request.user)
         except Cart.DoesNotExist:
             return Response(
                 {"error":"Your Cart is empty."},
@@ -59,37 +59,34 @@ class CheckOutView(APIView):
                     },
                     status=status.HTTP_400_BAD_REQUEST,
                 )
-            price=product.price
             locked_products[product.id] = product
+            total_amount+=product.price * cart_item.quantity
 
+        order=Order.objects.create(       # Create ONE order for the entire cart.
+            user=request.user,
+            total_amount=total_amount,
+            status=Order.Status.PENDING,
+            stock_reserved=True
+        )
+        order_items=[]   # Save purchase details and reserve the stock.
+                
 
-            total_amount+=price * cart_item.quantity
-
-            order=Order.objects.create(
-                user=request.user,
-                total_amount=total_amount,
-                status=Order.Status.PENDING,
-                stock_reserved=True
-            )
-            order_items=[]   # Save purchase details and reserve the stock.
-                   
-
-            for cart_item in cart_items:
-                product = locked_products[cart_item.product_id]
+        for cart_item in cart_items:
+            product = locked_products[cart_item.product_id]
 
             order_items.append(
                 OrderItem(
                     order=order,
                     product=product,
                     product_name=product.name,
-                    price=price,
+                    price=product.price,
                     quantity=cart_item.quantity,
                 )
             )
 
             product.stock-=cart_item.quantity
             product.save(update_fields=["stock"])
-       
+        
 
         OrderItem.objects.bulk_create(order_items)
         # Empty the cart so the same items aren't checked out again.
@@ -194,9 +191,7 @@ class CreateRazorpayOrderView(APIView):
 
         return Response(
             {
-                "key_id":__import__(
-                    "django-conf",fromlist=["settings"],
-                ).settings.RAZORPAY_KEY_ID,
+                "key_id":settings.RAZORPAY_KEY_ID,
                 "razorpay_order_id":razorpay_order["id"],
                 "amount":razorpay_order["amount"],
                 "currency":razorpay_order["currency"],
@@ -258,7 +253,7 @@ class VerifyRazorpayPaymentView(APIView):
                 "razorpay_payment_id": payment_id,
                 "razorpay_signature":signature,
             })
-            payment=client.payment.fetch("payment_id")
+            payment=client.payment.fetch(payment_id)
         except Exception:
             return Response(
                 {"error": "Payment verification failed."},
@@ -279,7 +274,7 @@ class VerifyRazorpayPaymentView(APIView):
 
         with transaction.atomic():
             locked_order=get_object_or_404(
-                Order,
+                Order.objects.select_for_update(),
                 id=order_id,
                 user=request.user
 
@@ -322,51 +317,7 @@ class VerifyRazorpayPaymentView(APIView):
 
 
 class RazorpayWebhookView(APIView):
-    permisson_classes=[AllowAny]
-    authentication_classes=[]
-    parser_classes=[]
-
-    def post(self,request):
-        signature=request.headers.get("X-Razorpay-Signature")
-
-        if not signature or not settings.RAZORPAY_WEBHOOK_SECRET:
-            return Response(
-                {"error":"Missing webhook signature or configuration."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        raw_body=request.body
-
-        try:
-            client=get_razorpay_client()
-            client.utility.verify_webhook_signature(
-                raw_body.decode("utf-8"),
-                signature,
-                settings.RAZORPAY_WEBHOOK_SECRET,
-            )
-
-        except Exception:
-            return Response(
-                {"error":"Invalid webhook signature."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        try:
-            event_data=json.loads(raw_body)
-        except (json.JSONDecodeError,UnicodeDecodeError):
-            return Response(
-                {"error":"Invalid JSON payload."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-        event=event_data.get("event")
-
-        return Response(
-            {"message":"Webhook signature verified.", "event": event},
-            status=status.HTTP_200_OK,
-        )
-
-    class RazorpayWebhookView(APIView):
-        permission_classes=[IsAuthenticated]
+        permission_classes=[AllowAny]
         authentication_classes=[]
         parser_classes=[]
 
@@ -392,8 +343,8 @@ class RazorpayWebhookView(APIView):
                 client=get_razorpay_client()
                 client.utility.verify_webhook_signature(
                     raw_body.decode("utf-8"),
-                    signature
-                    settings.RAZORPAY_WEBHOOK_sECRET,
+                    signature,
+                    settings.RAZORPAY_WEBHOOK_SECRET,
                 )
             except Exception:
                 return Response(
@@ -418,7 +369,7 @@ class RazorpayWebhookView(APIView):
             )
 
             try:
-                webhook,created=WebhookEvent.objects.get_or_create(
+                webhook_event,created=WebhookEvent.objects.get_or_create(
                     event_id=event_id,
                     defaults={
                         "event_type":event_type,
@@ -435,8 +386,7 @@ class RazorpayWebhookView(APIView):
                     return Response(
                         {"message": "Event already processed."},
                         status=status.HTTP_200_OK,
-                )
-
+                    )
                   # Event is safely stored, but processing is not implemented yet.
                 return Response(
                     {"message": "Event already received; processing is pending."},
