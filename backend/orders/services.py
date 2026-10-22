@@ -3,7 +3,7 @@ import razorpay
 from decimal import Decimal
 
 from django.conf import settings
-from django.db import transaction
+from django.db import transaction,IntegrityError
 
 from .models import Order
 
@@ -32,14 +32,27 @@ def create_razorpay_order(order):
     )
 
     order.razorpay_order_id=razorpay_order["id"]
+
     order.save(update_fields=["razorpay_order_id","updated_at"])
 
     return razorpay_order
-def confirm_captured_patment(order,payment_id):
+def confirm_captured_payment(order,payment_id):
     if (
         order.payment_status=="captured" and  order.razorpay_payment_id==payment_id
     ):
         return "already_processed"
+    # if Order.objects.filter(razorpay_payment_id=payment_id).exclude(id=order.id).exists():
+    #     order.required_reconciliation=True
+    #     order.save(update_fields=["requires_reconciliation","updated_at",])
+    #     raise ValueError("Payment ID is already assigned to another order.")
+        
+    payment_exists = Order.objects.filter(
+        razorpay_payment_id=payment_id
+    ).exclude(id=order.id).exists()
+
+    if payment_exists:
+        return "payment_conflict"
+
     if order.status==Order.Status.CANCELLED:
         order.razorpay_payment_id=payment_id
         order.payment_status="captured"
@@ -64,12 +77,15 @@ def confirm_captured_patment(order,payment_id):
     order.payment_status="captured"
     order.status=Order.Status.CONFIRMED
     order.requires_reconciliation=False
+    order.stock_reserved = False
+    
     order.save(
         update_fields=[
             "razorpay_payment_id",
             "payment_status",
             "status",
             "stock_reserved",
+             "requires_reconciliation",
             "updated_at",
         ]
     )
@@ -115,53 +131,8 @@ def process_captured_payment(event_data):
 
         if amount != expected_amount  or currency != "INR":
             raise ValueError("Payment amount or currency does not match.")
-
-        #safelyhandle duplicate delivery of the same captured payment 
-        if (
-            order.payment_status=="captured" and order.razorpay_payment_id==payment_id
-        ):
-            return "already_processed"
-
-        if order.status != Order.Status.CANCELLED:
-            order.razorpay_payment=payment_id
-            order.payment_status="captured"
-            order.requires_reconciliation=True
-
-            order.save(
-                update_fields=[
-                    "razorpay_payment_id",
-                    "payment_status",
-                    "requires_reconciliation",
-                    "updated_at",
-                ]
-            )
-
-            return "reconciliation_required"
-
-        
-        if (        #dont automatically confirm a cancelled or otherwise invalid order.
-            order.status !=Order.Status.PENDING
-            or not order.stock_reserved
-            or order.payment_status != "pending"
-
-        ):
-            raise ValueError(
-                "Order state is incompatible with payment confirmation."
-            )
-
-        order.razorpay_payment_id=payment_id
-        order.payment_status="captured"
-        order.status=Order.Status.CONFIRMED
-        order.stock_reserved=False
-
-        order.save(
-            update_fields=[
-                "razorpay_payment_id",
-                "payment_status",
-                "status",
-                "stock_reserved",
-                "updated_at",
-            ]
-        )
-    return "confirmed"
-
+        try:
+            with transaction.atomic():
+                return confirm_captured_payment(order,payment_id)
+        except IntegrityError:
+            return "payment_conflict"

@@ -17,7 +17,7 @@ from cart.models import Cart
 from products.models import Product
 from .models import Order,OrderItem,WebhookEvent
 from .serializers import OrderSerializer,OrderItemSerializer
-from .services import create_razorpay_order,get_razorpay_client,process_captured_payment
+from .services import create_razorpay_order,get_razorpay_client,process_captured_payment,confirm_captured_payment
 
 class CheckOutView(APIView):
     permission_classes=[IsAuthenticated]
@@ -236,15 +236,15 @@ class VerifyRazorpayPaymentView(APIView):
                  "order_id": str(order.id)},
                 status=status.HTTP_200_OK,
             )
-        if  (
-            order.status !=Order.Status.PENDING 
-            or not order.stock_reserved
-            or order.payment_status != "pending"
-        ):
-            return Response(
-                {"error": "This order cannot be verified for payment."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+        # if  (
+        #     order.status !=Order.Status.PENDING 
+        #     or not order.stock_reserved
+        #     or order.payment_status != "pending"
+        # ):
+        #     return Response(
+        #         {"error": "This order cannot be verified for payment."},
+        #         status=status.HTTP_400_BAD_REQUEST,
+        #     )
 
         client=get_razorpay_client()
 
@@ -295,9 +295,15 @@ class VerifyRazorpayPaymentView(APIView):
                                 status=status.HTTP_200_OK,
                             )
 
-                if (
-                    locked_order.razorpay_order_id !=razorpay_order_id
-                    or locked_order.status != Order.Status.PENDING
+                if  locked_order.razorpay_order_id !=razorpay_order_id:
+                     return Response(
+                        {"error": "Payment order does not match."},
+                        status=status.HTTP_409_CONFLICT,
+                    )
+                if locked_order.status ==Order.Status.CANCELLED:
+                    result=confirm_captured_payment(locked_order,payment_id)
+                elif(
+                    locked_order.status != Order.Status.PENDING
                     or not locked_order.stock_reserved
                     or locked_order.payment_status != "pending"
                 ):
@@ -305,21 +311,25 @@ class VerifyRazorpayPaymentView(APIView):
                         {"error": "Order state changed. Please check the order."},
                         status=status.HTTP_409_CONFLICT,
                     )
+                else:
+                    result= confirm_captured_payment(locked_order,payment_id)
 
-                locked_order.razorpay_payment_id=payment_id
-                locked_order.payment_status="captured"
-                locked_order.status=Order.Status.CONFIRMED
-                locked_order.stock_reserved=False
+                
 
-                locked_order.save(
-                    update_fields=[
-                        "razorpay_payment_id",
-                        "payment_status",
-                        "status",
-                        "stock_reserved",
-                        "updated_at",
-                    ]
-                )
+                # locked_order.razorpay_payment_id=payment_id
+                # locked_order.payment_status="captured"
+                # locked_order.status=Order.Status.CONFIRMED
+                # locked_order.stock_reserved=False
+
+                # locked_order.save(
+                #     update_fields=[
+                #         "razorpay_payment_id",
+                #         "payment_status",
+                #         "status",
+                #         "stock_reserved",
+                #         "updated_at",
+                #     ]
+                # )
         except  IntegrityError:
             return Response(
                 {
@@ -330,14 +340,46 @@ class VerifyRazorpayPaymentView(APIView):
                 },
                 status=status.HTTP_409_CONFLICT,
             )
+        if result == "payment_conflict":
+            return Response(
+                {
+                    "error": "This payment conflicts with an existing record.",
+                    "reconciliation_required": True,
+                },
+                status=status.HTTP_409_CONFLICT,
+        )
+        if result=="reconciliation_required":
+            return Response(
+                {
+                    "message":(
+                        "Payment was captured, but the order is cancelled."
+                        "Reconciliation is required."
+                    ),
+                    "order_id":str(order_id),
+                    "payment_status":"captured",
+                    "order_status":"cancelled",
+                    "requires_reconciliation":True
+
+                },
+                status=status.HTTP_409_CONFLICT
+            )
         return Response(
             {
-                "message": "Payment verified and order confirmed.",
-                "order_id": str(order_id),
-                "payment_status": "captured",
-                "order_status": "confirmed",
+                "message":(
+                    "Payment already confirmed."
+                    if result=="already_processed"
+                    else "Payment verified and order confirmed."
+                ),
+                "order_id":str(order_id),
+                "payment_status":"captured",
+                "order_status":(
+                    "confirmed"
+                    if result in ("confirmed","already_processed")
+                    else "cancelled"
+                )
+
             },
-            status=status.HTTP_200_OK,
+            status=status.HTTP_200_OK
         )
 
 
@@ -436,13 +478,36 @@ class RazorpayWebhookView(APIView):
 
                     if locked_event.event_type == "payment.captured":
                             result=process_captured_payment(locked_event.payload)
+                            if result == "payment_conflict":
+                                locked_event.reconciliation_required = True
+                                locked_event.processing_error=(
+                                        "Payment ID is already assigned to another order."
+                                    )
+                                locked_event.processed=True
+                                locked_event.processed_at=timezone.now()
+                                locked_event.save(update_fields=["processed", "processed_at","reconciliation_required","processing_error"])
+                                return Response(
+                                    {
+                                        "message": "Payment conflict recorded for reconciliation.",
+                                        "reconciliation_required": True,
+                                    },
+                                    status=status.HTTP_200_OK,
+                                )
                             if result=="reconciliation_required":
-                                pass
-
-
-                    locked_event.processed=True
-                    locked_event.processed_at=timezone.now()
-                    locked_event.save(update_fields=["processed", "processed_at"])
+                                locked_event.reconciliation_required=True
+                                locked_event.processing_error=(
+                                     "Payment captured for a cancelled order."
+                                )
+                    locked_event.processed = True
+                    locked_event.processed_at = timezone.now()
+                    locked_event.save(
+                        update_fields=[
+                            "processed",
+                            "processed_at",
+                            "reconciliation_required",
+                            "processing_error",
+                        ]
+                    )
             except ValueError:
                 return Response(
                     {"error": "Payment event could not be reconciled."},

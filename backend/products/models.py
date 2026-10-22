@@ -56,6 +56,19 @@ class ProductImage(models.Model):
     image=models.ImageField(upload_to="products/",blank=True)
     image_url=models.URLField(blank=True)
     is_primary=models.BooleanField(default=False)
+    primary_product_key=models.GeneratedField(
+        expression=models.Case(
+            models.When(
+                is_primary=True,
+                then=models.F("product")
+            ),
+            default=models.Value(None),
+            output_field=models.UUIDField(),
+        ),
+        output_field=models.UUIDField(),
+        db_persist=True,
+        null=True,editable=False
+    )
     created_at=models.DateTimeField(auto_now_add=True)
     updated_at=models.DateTimeField(auto_now=True)
 
@@ -64,8 +77,7 @@ class ProductImage(models.Model):
     class Meta:
         constraints=[
             models.UniqueConstraint(
-                fields=["product"],
-                condition=models.Q(is_primary=True),
+                fields=["primary_product_key"],
                 name="unique_primary_image_per_product"
             )
         ]
