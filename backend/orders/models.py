@@ -41,7 +41,6 @@ class Order(models.Model):
     razorpay_payment_id=models.CharField(max_length=100,blank=True,null=True,unique=True)
     payment_status=models.CharField(max_length=20,default="pending")
     requires_reconciliation = models.BooleanField(default=False)
-    processing_error = models.TextField(blank=True, default="")
 
 
     def __str__(self):
@@ -79,6 +78,8 @@ class WebhookEvent(models.Model):
     processed=models.BooleanField(default=False)
     received_at=models.DateTimeField(auto_now_add=True)
     processed_at=models.DateTimeField(null=True,blank=True)
+    reconciliation_required = models.BooleanField(default=False)
+    processing_error = models.TextField(blank=True, default="")
 
     def  __str__(self):
         return f"{self.event_type} - {self.event_id}"

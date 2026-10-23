@@ -1,5 +1,6 @@
 import json
 
+from unittest import TestCase
 from unittest.mock import patch
 
 
@@ -248,10 +249,6 @@ class ProductAPITests(APITestCase):
         self.assertTrue(
             Product.objects.filter(id=product.id).exists()
         )
-
-
-
-
 
 
 

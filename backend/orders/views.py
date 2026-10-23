@@ -508,7 +508,8 @@ class RazorpayWebhookView(APIView):
                             "processing_error",
                         ]
                     )
-            except ValueError:
+            except ValueError as exc:
+                print("DEBUG webhook ValueError:", repr(exc))
                 return Response(
                     {"error": "Payment event could not be reconciled."},
                     status=status.HTTP_500_INTERNAL_SERVER_ERROR,
