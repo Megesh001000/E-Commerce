@@ -11,7 +11,7 @@ from rest_framework.test import APIRequestFactory,force_authenticate
 from .models import Order, OrderItem
 from .services import process_captured_payment
 from .models import WebhookEvent
-from .views import RazorpayWebhookView,CheckOutView,CancelOrderView,VerifyRazorpayPaymentView
+from .views import RazorpayWebhookView,CheckOutView,CancelOrderView,VerifyRazorpayPaymentView,CreateRazorpayOrderView
 from cart.models import Cart, CartItem
 from categories.models import Category
 from products.models import Product
@@ -324,6 +324,41 @@ class RazorpayWebhookTests(TestCase):
                 ).count(),
                 1,
             )
+    def  test_captured_payment_for_cancelled_order_records_reconciliation(self):
+            user=User.objects.create_user(
+                username="cancelled_webhook_test",
+                password="test-password"
+
+      
+            )
+            order=Order.objects.create(
+                user=user,
+                total_amount=Decimal("125.00"),
+                status=Order.Status.CANCELLED,
+                payment_status="pending",
+                stock_reserved=False,
+                razorpay_order_id="order_webhook_test",
+            )
+            event_data=self.make_event()
+            request=self.make_request(
+                event_data,
+                event_id="evt_cancelled_capture_test",
+            )
+            with patch("orders.views.get_razorpay_client") as get_client:
+                get_client.return_value.utility.verify_webhook_signature.return_value=None
+                response=self.view(request)
+            order.refresh_from_db()
+            webhook_event = WebhookEvent.objects.get(
+                event_id="evt_cancelled_capture_test"
+            )
+
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(order.status, Order.Status.CANCELLED)
+            self.assertEqual(order.payment_status, "captured")
+            self.assertTrue(order.requires_reconciliation)
+            self.assertTrue(webhook_event.processed)
+            self.assertTrue(webhook_event.reconciliation_required)
+            
 class CheckOutAndCancellationTest(TestCase):
     def setUp(self):
         User=get_user_model()
@@ -475,5 +510,234 @@ class CheckOutAndCancellationTest(TestCase):
         self.assertEqual(order.status, Order.Status.PENDING)
         self.assertTrue(order.stock_reserved)
         self.assertEqual(self.product.stock, 8)
+class VerifyRazorpayPaymentViewTest(TestCase):
+    def setUp(self):
+        self.user=User.objects.create_user(
+            username="verify_payment_test",
+            password="test_password"
+        )
+
+        self.order=Order.objects.create(
+            user=self.user,
+            total_amount=Decimal("125.00"),
+            status=Order.Status.PENDING,
+            payment_status="pending",
+            stock_reserved=True,
+            razorpay_order_id="order_verify_test",
+        )
+        self.factory=APIRequestFactory()
+        self.view=VerifyRazorpayPaymentView.as_view()
+
+    def make_request(self, payment_id="pay_verify_test"):
+        request=self.factory.post(
+            f"/orders/{self.order.id}/verify-payment",
+            data={
+                "razorpay_order_id":"order_verify_test",
+                "razorpay_payment_id":payment_id,
+                "razorpay_signature":"test-signature"
+            },
+            format="json"
+
+        ) 
+        force_authenticate(request,user=self.user)
+        return request
+
+    def successful_payment_data(self):
+        return {
+            "id":"payment_verify_test",
+            "order_id":"order_verify_test",
+            "status":"captured",
+            "amount":12500,
+            "currency":"INR"
+        }
+    def test_successful_payment_verification_confirms_order(self):
+        with patch("orders.views.get_razorpay_client") as get_client:
+            client=get_client.return_value
+            client.utility.verify_razorpay_signature.return_value=None
+
+            client.payment.fetch.return_value=self.successful_payment_data()
+            response=self.view(
+                self.make_request(),order_id=self.order.id
+            )
+            self.order.refresh_from_db()
+
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(self.order.status, Order.Status.CONFIRMED)
+            self.assertEqual(self.order.payment_status, "captured")
+            self.assertEqual(
+                self.order.razorpay_payment_id,
+                "pay_verify_test",
+            )
+            self.assertFalse(self.order.stock_reserved)
+            self.assertFalse(self.order.requires_reconciliation)
+
+    def test_invalid_signature_is_rejected(self):
+        with patch("orders.views.get_razorpay_client") as get_client:
+            client=get_client.return_value
+            client.utility.verify_payment_signature.side_effect=Exception("Invalid signature")
+            
+            response=self.view(
+                self.make_request(),order_id=self.order.id
+            )
+            client.payment.fetch.assert_not_called()
+        self.order.refresh_from_db()
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(self.order.status, Order.Status.PENDING)
+        self.assertEqual(self.order.payment_status, "pending")
+        self.assertIsNone(self.order.razorpay_payment_id)
+
+    def test_payment_amount_mismatch_is_rejected(self):
+        payment=self.successful_payment_data()
+        payment["amount"]=12499
+        with patch("orders.views.get_razorpay_client") as get_client:
+            client=get_client.return_value
+            client.utility.verify_payment_signature.return_value=None
+            client.payment.fetch.return_value=payment
+
+            response=self.view(
+                self.make_request(),order_id=self.order.id
+            )
+
+        self.order.refresh_from_db()
+
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(self.order.status, Order.Status.PENDING)
+        self.assertEqual(self.order.payment_status, "pending")
+
+    def test_retry_of_same_confirmed_payment_is_idempotent(self):
+        self.order.status=Order.Status.CONFIRMED
+        self.order.payment_status="captured"
+        self.order.razorpay_payment_id="pay_verify_test"
+        self.order.stock_reserved=False
+        self.order.save(update_fields=[
+            "status",
+            "payment_status",
+            "razorpay_payment_id",
+            "stock_reserved",
+        ])
+        with patch("orders.views.get_razorpay_client") as get_client:
+            response = self.view(
+                self.make_request(),
+                order_id=self.order.id,
+            )
+
+            get_client.assert_not_called()
+
+        self.order.refresh_from_db()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(self.order.status, Order.Status.CONFIRMED)
+        self.assertEqual(self.order.payment_status, "captured")
+        self.assertEqual(
+            self.order.razorpay_payment_id,
+            "pay_verify_test",
+        )
+
+@override_settings(RAZORPAY_KEY_ID="rzp_test_dummy")
+class CreateRazorpayOrderViewTest(TestCase):
+    def setUp(self):
+        self.user=User.objects.create_user(
+            username="Sam",
+            password="Sam123"
+        )
+        self.order=Order.objects.create(
+            user=self.user,
+            total_amount=Decimal("125.00"),
+            status=Order.Status.PENDING,
+            payment_status="pending",
+            stock_reserved=True
+
+        )
+        self.factory=APIRequestFactory()
+        self.view=CreateRazorpayOrderView.as_view()
+
+    def make_request(self):
+        request=self.factory.post(
+            f"/orders/{self.order.id}/razerpay-order/",
+            data={},
+            format="json"
+        )
+        force_authenticate(request,user=self.user)
+
+        return request
+
+    def test_creates_razorpay_order_successfully(self):
+        with patch("orders.services.get_razorpay_client") as get_client:
+            get_client.return_value.order.create.return_value={
+                "id":"order_created_test",
+                "amount":12500,
+                "currency":"INR",
+            }
+            response=self.view(
+                self.make_request(),
+                order_id=self.order.id
+            )
+        self.order.refresh_from_db()
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.data["razorpay_order_id"],
+            "order_created_test",
+        )
+        self.assertEqual(response.data["amount"], 12500)
+        self.assertEqual(response.data["currency"], "INR")
+        self.assertEqual(response.data["key_id"], "rzp_test_dummy")
+        self.assertEqual(
+            self.order.razorpay_order_id,
+            "order_created_test",
+        )
+
+    def test_reuses_existing_razorpay_order(self):
+        self.order.razorpay_order_id="order_existing_test"
+        self.order.save(update_fields=["razorpay_order_id"])
+        with patch("orders.services.get_razorpay_client") as get_client:
+            response=self.view(
+                self.make_request(),
+                order_id=self.order.id
+            )
+            get_client.assert_not_called()
+        self.assertEqual(response.status_code,200)
+        self.assertEqual(response.data["razorpay_order_id"],"order_existing_test",)
+        self.assertEqual(response.data["amount"],12500)
+    def test_rejects_cancelled_order(self):
+        self.order.status=Order.Status.CANCELLED
+        self.order.stock_reserved=False
+        self.order.save(update_fields=["status","stock_reserved"])
+
+        with patch("orders.services.get_razorpay_client") as get_client:
+            response=self.view(
+                self.make_request(),
+                order_id=self.order.id
+            )
+            get_client.assert_not_called()
+        self.assertEqual(response.status_code,400)
+        
+    def  test_rejects_order_without_reserved_stock(self):
+        self.order.stock_reserved=False
+        self.order.save(update_fields=["stock_reserved"])
+        with patch("orders.services.get_razorpay_client") as get_client:
+            response = self.view(
+                self.make_request(),
+                order_id=self.order.id,
+            )
+            get_client.assert_not_called()
+
+        self.assertEqual(response.status_code, 400)
+
+
+    def  test_razorpay_api_failure_returns_502(self):
+        with patch("orders.services.get_razorpay_client") as get_client:
+            get_client.return_value.order.create.side_effect=Exception(
+                "Simulated Razorpay API failure"
+            )
+            response=self.view(
+                self.make_request(),
+                order_id=self.order.id
+            )
+        self.order.refresh_from_db()
+
+        self.assertEqual(response.status_code, 502)
+        self.assertIsNone(self.order.razorpay_order_id)
+        self.assertEqual(self.order.status, Order.Status.PENDING)
+        self.assertEqual(self.order.payment_status, "pending")
 
     
