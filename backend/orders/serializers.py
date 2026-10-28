@@ -70,17 +70,17 @@ class DeliveryAddressSerializer(serializers.ModelSerializer):
                         user=user,
                         is_default=True,
                     ).update(is_default=False)
-                return DeliveryAddress.objects.filter(
+                return DeliveryAddress.objects.create(
                     user=user,
                     **validated_data,
                 )
 
         def update(self,instance,validated_data):
             with transaction.atomic():
-                if validated_data.get("is_default",instance):
+                if validated_data.get("is_default",instance.is_default,):
                     DeliveryAddress.objects.filter(
                         user=instance.user,
                         is_default=True,
                     ).exclude(pk=instance.pk).update(is_default=False)
 
-                    return super().update(instance,validated_data)
+                return super().update(instance,validated_data)

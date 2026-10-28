@@ -8,10 +8,17 @@ from django.test import TestCase,override_settings
 
 from rest_framework.test import APIRequestFactory,force_authenticate
 
-from .models import Order, OrderItem
+from .models import Order, OrderItem,DeliveryAddress
 from .services import process_captured_payment
 from .models import WebhookEvent
-from .views import RazorpayWebhookView,CheckOutView,CancelOrderView,VerifyRazorpayPaymentView,CreateRazorpayOrderView
+from .views import (
+                    RazorpayWebhookView,
+                    CheckOutView,CancelOrderView,
+                    VerifyRazorpayPaymentView,
+                    CreateRazorpayOrderView,
+                    DeliveryAddressDetailView,
+                    DeliveryAddressListCreateView,
+                )
 from cart.models import Cart, CartItem
 from categories.models import Category
 from products.models import Product
@@ -1060,5 +1067,175 @@ class CreateRazorpayOrderViewTest(TestCase):
         self.assertIsNone(self.order.razorpay_order_id)
         self.assertEqual(self.order.status, Order.Status.PENDING)
         self.assertEqual(self.order.payment_status, "pending")
+class DeliveryAddressAPITests(TestCase):
+    def setUp(self):
+        self.factory=APIRequestFactory()
 
-    
+        self.user=User.objects.create_user(
+            username="delivery_user",
+            password="test-password",
+        )
+        self.other_user=User.objects.create_user(
+            username="other_delivery_user",
+            password="test-password",
+        )
+        self.list_create_view=(DeliveryAddressListCreateView.as_view())
+        self.detail_view=DeliveryAddressDetailView.as_view()
+
+    def  valid_address_data(self,**override):
+        data={
+            "label": "Home",
+            "recipient_name": "Megesh",
+            "phone": "9876543210",
+            "address_line1": "10 Main Street",
+            "address_line2": "",
+            "locality": "Tambaram",
+            "city": "Chennai",
+            "state": "Tamil Nadu",
+            "postal_code": "600045",
+            "country": "India",
+            "latitude": "12.924900",
+            "longitude": "80.100000",
+            "is_default": False,
+        }
+        data.update(override)
+        return data
+
+    def make_address(self,user,**overrides):
+        data=self.valid_address_data(**overrides)
+        return DeliveryAddress.objects.create(
+            user=user,
+            **data
+        )
+    def test_user_can_create_delivery_address(self):
+        request=self.factory.post(
+            "/delivery-addresses/",
+            self.valid_address_data(),
+            format="json",
+        )
+        force_authenticate(request,user=self.user)
+        response=self.list_create_view(request)
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(
+            DeliveryAddress.objects.filter(user=self.user).count(),
+            1,
+        )
+        address = DeliveryAddress.objects.get(user=self.user)
+        self.assertEqual(address.recipient_name, "Megesh")
+
+    def test_user_only_sees_own_address(self):
+        self.make_address(self.user)
+        self.make_address(
+            self.other_user,
+            recipient_name="Another person"
+        )
+
+        request=self.factory.get("/delivery-addresses/")
+        force_authenticate(request,user=self.user)
+        response=self.list_create_view(request)
+
+        self.assertEqual(response.status_code, 200)
+        addresses=response.data["results"]
+        self.assertEqual(len(addresses),1)
+        self.assertEqual(
+            addresses[0]["recipient_name"],
+            "Megesh",
+        )
+    def test_user_can_update_his_own_address(self):
+        address=self.make_address(self.user)
+        request=self.factory.patch(
+            f"/delivery-addresses/{address.pk}",
+            {"label":"Office"},
+            format="json"
+        )
+        force_authenticate(request, user=self.user)
+
+        response = self.detail_view(request, pk=address.pk)
+
+        self.assertEqual(response.status_code, 200)
+        address.refresh_from_db()
+        self.assertEqual(address.label, "Office")
+    def user_can_access_another_user_address(self):
+        address=self.make_address(user=self.other_user)
+        request = self.factory.get(
+            f"/delivery-addresses/{address.pk}/"
+        )
+        force_authenticate(request, user=self.user)
+
+        response = self.detail_view(request, pk=address.pk)
+
+        self.assertEqual(response.status_code, 404)
+
+    def test_invalid_coordinates_are_rejected(self):
+        request = self.factory.post(
+            "/delivery-addresses/",
+            self.valid_address_data(latitude="120.000000"),
+            format="json",
+        )
+        force_authenticate(request, user=self.user)
+
+        response = self.list_create_view(request)
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(
+            DeliveryAddress.objects.filter(user=self.user).count(),
+            0,
+        )
+    def test_user_cannot_access_another_users_address(self):
+        address = self.make_address(user=self.other_user)
+
+        request = self.factory.get(
+            f"/delivery-addresses/{address.pk}/"
+        )
+        force_authenticate(request, user=self.user)
+
+        response = self.detail_view(request, pk=address.pk)
+
+        self.assertEqual(response.status_code, 404)
+
+    def user_can_delete_his_own_address(self):
+        address=self.make_address(self.user)
+        request=self.factory.delete(
+            f"/delivery-addresses/{address.pk}/",
+        )
+        force_authenticate(request,user=self.user)
+        response=self.detail_view(request,pk=address.pk)
+        self.assertEqual(response.status_code, 204)
+        self.assertFalse(
+            DeliveryAddress.objects.filter(
+                pk=address.pk
+            ).exists()
+        )
+
+    def test_new_default_address_replaces_previous_default(self):
+        old_address=self.make_address(self.user,is_default=True)
+        request=self.factory.post(
+            "/delivery-address/",
+            self.valid_address_data(
+                label="Work",
+                address_line="20 Business Road",
+
+            ),
+            format="json",
+            
+        )
+        force_authenticate(request,user=self.user)
+        response=self.list_create_view(request)
+        self.assertEqual(response.status_code, 201)
+
+        old_address.refresh_from_db()
+        self.assertFalse(old_address.is_default)
+
+        new_address = DeliveryAddress.objects.get(
+            user=self.user,
+            address_line1="20 Business Road",
+        )
+        self.assertTrue(new_address.is_default)
+
+        self.assertEqual(
+            DeliveryAddress.objects.filter(
+                user=self.user,
+                is_default=True,
+            ).count(),
+            1,
+        )

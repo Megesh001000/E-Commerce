@@ -528,10 +528,25 @@ class RazorpayWebhookView(APIView):
                             status=status.HTTP_200_OK,
                         )
 
+class DeliveryAddressListCreateView(generics.ListCreateAPIView):
+    serializer_class=DeliveryAddressSerializer
+    permission_classes=[IsAuthenticated]
 
+    def get_queryset(self):
+        return DeliveryAddress.objects.filter(
+            user=self.request.user
+        )
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
 
+class DeliveryAddressDetailView(generics.RetrieveUpdateDestroyAPIView):
 
-
+    serializer_class=DeliveryAddressSerializer
+    permission_classes=[IsAuthenticated]
+    def get_queryset(self):
+        return DeliveryAddress.objects.filter(
+            user=self.request.user
+        )
 
             
 
