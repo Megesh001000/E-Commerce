@@ -358,7 +358,327 @@ class RazorpayWebhookTests(TestCase):
             self.assertTrue(order.requires_reconciliation)
             self.assertTrue(webhook_event.processed)
             self.assertTrue(webhook_event.reconciliation_required)
-            
+    def test_payment_id_conflict_is_recorded_for_reconciliation(self):
+        user=User.objects.create_user(
+            username="payment_conflict_user",
+            password="test-password"
+        )
+        order = Order.objects.create(
+            user=user,
+            total_amount=Decimal("125.00"),
+            status=Order.Status.PENDING,
+            payment_status="pending",
+            stock_reserved=True,
+            razorpay_order_id="order_webhook_test",
+        )
+
+        Order.objects.create(
+            user=user,
+            total_amount=Decimal("125.00"),
+            status=Order.Status.CONFIRMED,
+            payment_status="captured",
+            stock_reserved=False,
+            razorpay_order_id="order_other_webhook",
+            razorpay_payment_id="payment_webhook_test",
+        )
+        event_data=self.make_event()
+        resquest=self.make_request(
+            event_data,
+            event_id="evt_payment_conflict_test",
+        )
+        with patch("orders.views.get_razorpay_client") as get_client:
+            get_client.return_value.utility.verify_razorpay_signature=None
+
+            response=self.view(
+                resquest
+            )
+        order.refresh_from_db()
+        webhook_event=WebhookEvent.objects.create(
+            event_id="evt_payment_conflict_test",
+        )
+        self.assertEqual(response.status_code,200)
+        self.assertTrue(response.data["reconciliation_required"])
+        self.assertEqual(order.payment_status, "pending")
+        self.assertIsNone(order.razorpay_payment_id)
+        self.assertTrue(webhook_event.processed)
+        self.assertTrue(webhook_event.reconciliation_required)
+
+    def test_wrong_amount_and_currency_are_rejected(self):
+        user=User.objects.create_user(
+            username="Invalid_user",
+            password="test-password"
+        )
+        order=Order.objects.create(
+            user=user,
+            total_amount=Decimal("125.00"),
+            status=Order.Status.PENDING,
+            payment_status="pending",
+            stock_reserved=True,
+            razorpay_order_id="order_webhook_test",
+        )
+        invalid_events=[
+            ("evt_wrong_amount_test", "amount", 12499),
+            ("evt_wrong_currency_test", "currency", "USD"),
+        ]
+
+        for event_id,field,value in invalid_events:
+            with self.subTest(field=field):
+                event_data=self.make_event()
+                event_data["payload"]["payment"]["entity"][field]=value
+                request=self.make_request(
+                    event_data,
+                    event_id=event_id
+                )
+                with patch("orders.views.get_razorpay_client") as get_client:
+                    get_client.return_value.utility.verify_payment_signature.return_value=None
+                    response=self.view(request)
+                self.assertEqual(response.status_code, 500)
+
+                webhook_event = WebhookEvent.objects.get(event_id=event_id)
+                self.assertFalse(webhook_event.processed)
+
+                order.refresh_from_db()
+                self.assertEqual(order.status, Order.Status.PENDING)
+                self.assertEqual(order.payment_status, "pending")
+                self.assertIsNone(order.razorpay_payment_id)
+    def test_unprocessed_webhook_can_be_retried(self):
+        user = User.objects.create_user(
+            username="webhook_retry_user",
+            password="test-password",
+        )
+
+        order = Order.objects.create(
+            user=user,
+            total_amount=Decimal("125.00"),
+            status=Order.Status.PENDING,
+            payment_status="pending",
+            stock_reserved=True,
+            razorpay_order_id="order_webhook_test",
+        )
+
+        event_data = self.make_event()
+
+        # Simulate an event saved earlier whose processing did not complete.
+        WebhookEvent.objects.create(
+            event_id="evt_retry_test",
+            event_type="payment.captured",
+            payload=event_data,
+            processed=False,
+        )
+
+        request = self.make_request(
+            event_data,
+            event_id="evt_retry_test",
+        )
+
+        with patch("orders.views.get_razorpay_client") as get_client:
+            get_client.return_value.utility.verify_webhook_signature.return_value = None
+            response = self.view(request)
+
+        order.refresh_from_db()
+        webhook_event = WebhookEvent.objects.get(event_id="evt_retry_test")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(order.status, Order.Status.CONFIRMED)
+        self.assertEqual(order.payment_status, "captured")
+        self.assertTrue(webhook_event.processed)
+    def test_captured_payment_for_cancelled_order_records_reconciliation(self):
+            user=User.objects.create_user(
+                username="cancelled_webhook_user",
+                password="test-password"
+            )
+            order=Order.objects.create(
+                user=user,
+                total_amount=Decimal("125.00"),
+                status=Order.Status.CANCELLED,
+                payment_status="pending",
+                stock_reserved=False,
+                razorpay_order_id="order_webhook_test"
+                
+            )
+            event_data=self.make_event()
+            request=self.make_request(
+                event_data,
+                event_id="evt_cancelled_capture_test",
+            )
+            with patch("orders.views.get_razorpay_client") as  get_client:
+                get_client.return_value.utility.verify_webhook_signature.return_value=None
+                response=self.view(request)
+
+            order.refresh_from_db()
+            webhook_event=WebhookEvent.objects.get(
+                event_id="evt_cancelled_capture_test"
+            )
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(order.status, Order.Status.CANCELLED)
+            self.assertEqual(order.payment_status, "captured")
+            self.assertTrue(order.requires_reconciliation)
+            self.assertTrue(webhook_event.processed)
+            self.assertTrue(webhook_event.reconciliation_required)
+
+    def test_payment_id_conflict_is_recorded_for_reconciliation(self):
+        user=User.objects.create_user(
+            username="payment_conflict_test",
+            password="test-password"
+        )
+        
+        order=Order.objects.create(
+            user=user,
+            total_amount=Decimal("125.00"),
+            status=Order.Status.PENDING,
+            payment_status="pending",
+            stock_reserved=True,
+            razorpay_order_id="order_webhook_test",
+        )
+        
+        Order.objects.create(
+            user=user,
+            total_amount=Decimal("125.00"),
+            status=Order.Status.CONFIRMED,
+            payment_status="captured",
+            stock_reserved=False,
+            razorpay_order_id="order_other_webhook",
+            razorpay_payment_id="payment_webhook_test", 
+        )
+        event_data = self.make_event()
+        request = self.make_request(
+            event_data,
+            event_id="evt_payment_conflict_test",
+        )
+
+        with patch("orders.views.get_razorpay_client") as get_client:
+            get_client.return_value.utility.verify_webhook_signature.return_value = None
+            response = self.view(request)
+
+        order.refresh_from_db()
+        webhook_event = WebhookEvent.objects.get(
+            event_id="evt_payment_conflict_test"
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.data["reconciliation_required"])
+        self.assertEqual(order.payment_status, "pending")
+        self.assertIsNone(order.razorpay_payment_id)
+        self.assertTrue(webhook_event.processed)
+        self.assertTrue(webhook_event.reconciliation_required)
+
+    def test_wrong_amount_and_currency_are_rejected(self):
+        user = User.objects.create_user(
+            username="invalid_payment_details_user",
+            password="test-password",
+        )
+
+        order = Order.objects.create(
+            user=user,
+            total_amount=Decimal("125.00"),
+            status=Order.Status.PENDING,
+            payment_status="pending",
+            stock_reserved=True,
+            razorpay_order_id="order_webhook_test",
+        )
+
+        invalid_events = [
+            ("evt_wrong_amount_test", "amount", 12499),
+            ("evt_wrong_currency_test", "currency", "USD"),
+        ]
+
+        for event_id, field, value in invalid_events:
+            with self.subTest(field=field):
+                event_data = self.make_event()
+                event_data["payload"]["payment"]["entity"][field] = value
+
+                request = self.make_request(
+                    event_data,
+                    event_id=event_id,
+                )
+
+                with patch("orders.views.get_razorpay_client") as get_client:
+                    get_client.return_value.utility.verify_webhook_signature.return_value = None
+                    response = self.view(request)
+
+                self.assertEqual(response.status_code, 500)
+
+                webhook_event = WebhookEvent.objects.get(event_id=event_id)
+                self.assertFalse(webhook_event.processed)
+
+                order.refresh_from_db()
+                self.assertEqual(order.status, Order.Status.PENDING)
+                self.assertEqual(order.payment_status, "pending")
+                self.assertIsNone(order.razorpay_payment_id)
+
+    def test_unprocessed_webhook_can_be_retried(self):
+        user = User.objects.create_user(
+            username="webhook_retry_user",
+            password="test-password",
+        )
+
+        order = Order.objects.create(
+            user=user,
+            total_amount=Decimal("125.00"),
+            status=Order.Status.PENDING,
+            payment_status="pending",
+            stock_reserved=True,
+            razorpay_order_id="order_webhook_test",
+        )
+
+        event_data = self.make_event()
+
+        # Simulate an event saved earlier whose processing did not complete.
+        WebhookEvent.objects.create(
+            event_id="evt_retry_test",
+            event_type="payment.captured",
+            payload=event_data,
+            processed=False,
+        )
+
+        request = self.make_request(
+            event_data,
+            event_id="evt_retry_test",
+        )
+
+        with patch("orders.views.get_razorpay_client") as get_client:
+            get_client.return_value.utility.verify_webhook_signature.return_value = None
+            response = self.view(request)
+
+        order.refresh_from_db()
+        webhook_event = WebhookEvent.objects.get(event_id="evt_retry_test")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(order.status, Order.Status.CONFIRMED)
+        self.assertEqual(order.payment_status, "captured")
+        self.assertTrue(webhook_event.processed)
+
+    def test_reused_event_id_with_different_payload_is_rejected(self):
+        event_data = self.make_event()
+
+        WebhookEvent.objects.create(
+            event_id="evt_payload_conflict_test",
+            event_type="payment.captured",
+            payload=event_data,
+            processed=False,
+        )
+
+        changed_event = self.make_event()
+        changed_event["payload"]["payment"]["entity"]["amount"] = 12499
+
+        request = self.make_request(
+            changed_event,
+            event_id="evt_payload_conflict_test",
+        )
+
+        with patch("orders.views.get_razorpay_client") as get_client:
+            get_client.return_value.utility.verify_webhook_signature.return_value = None
+            response = self.view(request)
+
+        webhook_event = WebhookEvent.objects.get(
+            event_id="evt_payload_conflict_test"
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(webhook_event.payload, event_data)
+        self.assertFalse(webhook_event.processed)
+
+
 class CheckOutAndCancellationTest(TestCase):
     def setUp(self):
         User=get_user_model()
@@ -510,6 +830,7 @@ class CheckOutAndCancellationTest(TestCase):
         self.assertEqual(order.status, Order.Status.PENDING)
         self.assertTrue(order.stock_reserved)
         self.assertEqual(self.product.stock, 8)
+   
 class VerifyRazorpayPaymentViewTest(TestCase):
     def setUp(self):
         self.user=User.objects.create_user(
