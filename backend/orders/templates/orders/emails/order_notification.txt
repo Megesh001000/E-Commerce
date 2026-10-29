@@ -1,0 +1,29 @@
+Hello{% if order.user.first_name %} {{ order.user.first_name }}{% else %} {{ order.user.username}}{% endif %},
+
+{{ heading }}
+
+
+{{ message }}
+
+
+Order Number: {{ order.id }}
+order Date: {{ order.created_at }}
+
+Items:
+{% for item in items %}
+- {{ item.product_name }} | Quantity: {{ item.quantity }} | Unit price: ₹{{ item.price }} | Subtotal: ₹{{ item.sub_total}}
+{% endfor %}
+
+Order Total: {{ order.total_amount }}
+
+{% if delivery_address %}
+Delivery Address:
+{{ delivery_address.recipient_name }}
+{{ delivery_address.address_line1 }}
+{% if delivery_address.address_line2 %}{{ delivery_address.address_line2 }}
+{% endif %}{% if delivery_address.locality %}{{ delivery_address.locality }}
+{% endif %}{{ delivery_address.city }}, {{ delivery_address.state }}
+{{ delivery_address.postal_code }}, {{ delivery_address.country }}
+{% endif %}
+
+Thank you for shopping with us.

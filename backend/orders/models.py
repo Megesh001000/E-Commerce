@@ -11,6 +11,15 @@ class Order(models.Model):
         PENDING="pending","Pending"
         CONFIRMED="confirmed","Confirmed"
         CANCELLED="cancelled","Cancelled"
+    
+    class FulfillmentStatus(models.TextChoices):
+        NOT_READY="not_ready","Not Ready"
+        PROCESSING="processing","Processing"
+        SHIPPED="shipped","Shipped"
+        OUT_FOR_DELIVERY="out_for_delivery","Out for delivery"
+        DELIVERED="delivered","Delivered"
+
+
 
     id=models.UUIDField(
         primary_key=True,
@@ -29,6 +38,13 @@ class Order(models.Model):
         default=Status.PENDING,
 
     )
+    fulfillment_status=models.CharField(
+            max_length=30,
+            choices=FulfillmentStatus.choices,
+            default=FulfillmentStatus.NOT_READY,
+    
+    
+        )
     total_amount=models.DecimalField(
         max_digits=12,
         decimal_places=2,
@@ -151,3 +167,46 @@ class DeliveryAddress(models.Model):
             "latitude": str(self.latitude),
             "longitude": str(self.longitude),
         }
+class OrderEmailNotification(models.Model):
+    class NotificationType(models.TextChoices):
+        ORDER_CONFIRMED="order_confirmed","Order Confirmed"
+        ORDER_CANCELLED = "order_cancelled", "Order cancelled"
+        
+        PROCESSING="processing","Processing"
+        SHIPPED="shipped","Shipped"
+        OUT_FOR_DELIVERY="out_for_delivery","Out for Delivery"
+        DELIVERED="delivered","Delivered"
+
+    class Status(models.TextChoices):
+        PENDING="pending","Pending"
+        SENDING="sending","Sending"
+        SENT="sent","Sent"
+        FAILED="failed","Failed"
+
+    id=models.UUIDField(primary_key=True,editable=False,default=uuid.uuid4)
+    order=models.ForeignKey(Order,on_delete=models.PROTECT,related_name="email_notifications")
+    notification_type=models.CharField(max_length=30,choices=NotificationType.choices)
+    recipient_email=models.EmailField(max_length=254)
+    status=models.CharField(max_length=20,choices=Status.choices,default=Status.PENDING)
+
+    attempts=models.PositiveIntegerField(default=0)
+    sent_at=models.DateTimeField(null=True,blank=True)
+
+    last_error=models.TextField(blank=True,default="")
+
+    created_at=models.DateTimeField(auto_now_add=True)
+    updated_at=models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering=["-created_at"]
+        constraints=[
+            models.UniqueConstraint(
+                fields=["order","notification_type"],
+                name="unique_order_email_notification_type"
+            ),
+        ]
+    def  __str__(self):
+        return (
+            f"Order {self.order_id} - "
+            f"{self.notification_type} ({self.status})"
+        )
