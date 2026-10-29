@@ -62,25 +62,25 @@ class DeliveryAddressSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at"
         ]
-        def create(self,validated_data):
-            user=self.context["request"].user
-            with transaction.atomic():
-                if validated_data.get("is_default",False):
-                    DeliveryAddress.objects.filter(
-                        user=user,
-                        is_default=True,
-                    ).update(is_default=False)
-                return DeliveryAddress.objects.create(
+    def create(self,validated_data):
+        user=self.context["request"].user
+        with transaction.atomic():
+            if validated_data.get("is_default",False):
+                DeliveryAddress.objects.filter(
                     user=user,
-                    **validated_data,
-                )
+                    is_default=True,
+                ).update(is_default=False)
+            return DeliveryAddress.objects.create(
+                user=user,
+                **validated_data,
+            )
 
-        def update(self,instance,validated_data):
-            with transaction.atomic():
-                if validated_data.get("is_default",instance.is_default,):
-                    DeliveryAddress.objects.filter(
-                        user=instance.user,
-                        is_default=True,
-                    ).exclude(pk=instance.pk).update(is_default=False)
+    def update(self,instance,validated_data):
+        with transaction.atomic():
+            if validated_data.get("is_default",instance.is_default,):
+                DeliveryAddress.objects.filter(
+                    user=instance.user,
+                    is_default=True,
+                ).exclude(pk=instance.pk).update(is_default=False)
 
-                return super().update(instance,validated_data)
+            return super().update(instance,validated_data)

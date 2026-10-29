@@ -1210,11 +1210,11 @@ class DeliveryAddressAPITests(TestCase):
     def test_new_default_address_replaces_previous_default(self):
         old_address=self.make_address(self.user,is_default=True)
         request=self.factory.post(
-            "/delivery-address/",
+            "/delivery-addresses/",
             self.valid_address_data(
                 label="Work",
-                address_line="20 Business Road",
-
+                address_line1="20 Business Road",
+                is_default=True,
             ),
             format="json",
             
@@ -1229,6 +1229,7 @@ class DeliveryAddressAPITests(TestCase):
         new_address = DeliveryAddress.objects.get(
             user=self.user,
             address_line1="20 Business Road",
+            
         )
         self.assertTrue(new_address.is_default)
 
