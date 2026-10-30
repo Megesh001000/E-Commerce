@@ -1,4 +1,4 @@
-from django.urls import path
+from django.urls import path,include
 from .views import CheckOutView,CancelOrderView,CreateRazorpayOrderView,VerifyRazorpayPaymentView,RazorpayWebhookView,DeliveryAddressDetailView,DeliveryAddressListCreateView
 
 urlpatterns=[
@@ -9,5 +9,6 @@ urlpatterns=[
     path("webhook/razorpay/",RazorpayWebhookView.as_view(),name="razorpay-webhook"),
     path("delivery-addresses/",DeliveryAddressListCreateView.as_view(),name="delivery-address-list-create"),
     path("delivery-addresses/<uuid:pk>/",DeliveryAddressDetailView.as_view(),name="delivery-address-detail-create"),
+
 
 ]

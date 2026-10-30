@@ -8,8 +8,9 @@ from django.test import TestCase,override_settings
 
 from rest_framework.test import APIRequestFactory,force_authenticate
 
-from .models import Order, OrderItem,DeliveryAddress
-from .services import process_captured_payment
+from .services import process_captured_payment,confirm_captured_payment,create_razorpay_order
+
+from .models import Order, OrderItem,DeliveryAddress,OrderEmailNotification
 from .models import WebhookEvent
 from .views import (
                     RazorpayWebhookView,
@@ -22,6 +23,7 @@ from .views import (
 from cart.models import Cart, CartItem
 from categories.models import Category
 from products.models import Product
+
 User = get_user_model()
 
 
@@ -1240,3 +1242,37 @@ class DeliveryAddressAPITests(TestCase):
             ).count(),
             1,
         )
+
+class OrderConfirmationEmailTriggerTests(TestCase):
+    def test_email_is_triggered_after_order_confirmation_commit(self):
+        user=User.objects.create_user(
+            username="email_trigger_user",
+            email="customer@example.com",
+            password="test-password",
+        )
+        order = Order.objects.create(
+            user=user,
+            total_amount=Decimal("125.00"),
+            status=Order.Status.PENDING,
+            payment_status="pending",
+            stock_reserved=True,
+            razorpay_order_id="order_email_trigger_test",
+        )
+        with patch("orders.services.send_order_notification") as mock_send:
+            with self.captureOnCommitCallbacks(execute=True) as callbacks:
+                result=confirm_captured_payment(
+                    order,
+                    "payment_email_trigger_test"
+                )
+            self.assertEqual(result,"confirmed")
+            self.assertEqual(len(callbacks),1)
+
+            mock_send.assert_called_once_with(
+                order.pk,
+                OrderEmailNotification.NotificationType.ORDER_CONFIRMED
+            )
+        order.refresh_from_db()
+
+        self.assertEqual(order.status, Order.Status.CONFIRMED)
+        self.assertFalse(order.stock_reserved)
+        self.assertEqual(order.payment_status, "captured")

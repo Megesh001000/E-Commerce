@@ -5,7 +5,8 @@ from decimal import Decimal
 from django.conf import settings
 from django.db import transaction,IntegrityError
 
-from .models import Order
+from .models import Order,OrderEmailNotification
+from orders.emails.email_services import send_order_notification
 
 
 
@@ -89,6 +90,14 @@ def confirm_captured_payment(order,payment_id):
             "updated_at",
         ]
     )
+    transaction.on_commit(
+        lambda order_id=order.pk: send_order_notification(
+            order_id,
+            OrderEmailNotification.NotificationType.ORDER_CONFIRMED
+        ),
+        robust=True
+    )
+      
     return "confirmed"
 
 

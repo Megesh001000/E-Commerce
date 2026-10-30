@@ -5,8 +5,8 @@ from django.contrib.auth import get_user_model
 from django.core  import mail
 from django.test import TestCase,override_settings
 
-from .emails.email_services import send_order_notification
-from .models import Order,OrderEmailNotification
+from .email_services import send_order_notification
+from ..models import Order,OrderEmailNotification
 
 User=get_user_model()
 @override_settings(
