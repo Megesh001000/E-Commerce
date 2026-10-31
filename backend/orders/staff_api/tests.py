@@ -88,8 +88,7 @@ class StaffOrderAPITest(TestCase):
         self.assertEqual(response.status_code,status.HTTP_200_OK)
 
         results=(
-            response.data["results"]
-            if isinstance(response.data,dict) and "results" in response.data else response.data
+            response.data["results"] if isinstance(response.data,dict) and "results" in response.data else response.data
         )
 
 
@@ -100,7 +99,7 @@ class StaffOrderAPITest(TestCase):
         )
 
     def test_warehouse_staff_can_retrieve_order(self):
-        request=self.factory.get(f"/api/staff/orders/{self.order.pk}")
+        request=self.factory.get(f"/api/staff/orders/{self.order.pk}/")
         force_authenticate(request,user=self.warehouse_staff)
         response=self.detail_view(
             request,
@@ -112,7 +111,7 @@ class StaffOrderAPITest(TestCase):
             str(self.order.pk),
         )
     def test_warehouse_staff_can_update_fulfillment_status(self):
-        request=self.factory.get(
+        request=self.factory.patch(
             f"/api/staff/orders/{self.order.pk}/fulfillment/",
             {
                 "fulfillment_status":(Order.FulfillmentStatus.PROCESSING)
@@ -131,8 +130,7 @@ class StaffOrderAPITest(TestCase):
 
         self.order.refresh_from_db()
 
-        self.assertEqual(
-        self.order.fulfillment_status,Order.FulfillmentStatus.PROCESSING)
+        self.assertEqual(self.order.fulfillment_status,Order.FulfillmentStatus.PROCESSING)
         self.assertEqual(response.data["result"],"updated")
         self.assertEqual(len(callbacks), 1)
 
@@ -205,3 +203,67 @@ class StaffOrderAPITest(TestCase):
 
         self.assertEqual(len(callbacks), 0)
         mock_send.assert_not_called()
+
+    def test_anonymous_user_cannot_access_staff_order_list(self):
+        request=self.factory.get("/api/staff/orders/")
+        response=self.list_view(request)
+
+        self.assertIn(response.status_code,[status.HTTP_401_UNAUTHORIZED,status.HTTP_403_FORBIDDEN])
+
+    def test_order_list_filters_by_payment_and_fulfillment_status(self):
+        request=self.factory.get(
+            "/api/staff/orders/",
+            {
+                "payment_status":"captured",
+                "fulfillment_status":"not_ready"
+
+            },
+        )
+        force_authenticate(request,user=self.warehouse_staff)
+        response=self.list_view(request)
+        self.assertEqual(response.status_code,status.HTTP_200_OK)
+        results=response.data["results"]
+        self.assertEqual(len(results),1)
+        self.assertEqual(
+            str(results[0]["id"]),str(self.order.pk)
+        )
+    def test_order_list_searches_by_customer_username(self):
+        request=self.factory.get(
+            "/api/staff/orders/",
+            {
+                "search":"staff_test_customer"
+            },
+        )
+        force_authenticate(request,user=self.warehouse_staff)
+        response=self.list_view(request)
+        self.assertEqual(response.status_code,status.HTTP_200_OK)
+        self.assertEqual(response.data["count"],1)
+        self.assertEqual(str(response.data["results"][0]["id"]),str(self.order.pk))
+
+    def test_order_list_filters_by_date_range(self):
+        request = self.factory.get(
+            "/api/staff/orders/",
+            {
+                "date_from": "2000-01-01",
+                "date_to": "2100-01-01",
+            },
+        )
+        force_authenticate(request, user=self.warehouse_staff)
+
+        response = self.list_view(request)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["count"], 1)
+    def test_order_list_rejects_invalid_date(self):
+        request = self.factory.get(
+            "/api/staff/orders/",
+            {"date_from": "invalid-date"},
+        )
+        force_authenticate(request, user=self.warehouse_staff)
+
+        response = self.list_view(request)
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_400_BAD_REQUEST,
+        )
