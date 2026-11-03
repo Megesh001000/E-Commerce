@@ -1,8 +1,9 @@
-from django.db import models
 import uuid
+from django.db import models
 from django.utils.text import slugify
-from categories.models import Category
 from django.core.exceptions import ValidationError
+from django.conf import settings
+from categories.models import Category
 
 class Tag(models.Model):
     id=models.UUIDField(primary_key=True,default=uuid.uuid4,editable=False)
@@ -89,3 +90,11 @@ class ProductImage(models.Model):
 
     def __str__(self):
         return f"{self.product.name} - Image"
+class StockAdjustments(models.Model):
+    class Reason(models.TextChoices):
+        RESTOCK="restock","Restock"
+        DAMAGED="damaged","Damaged stock"
+        CORRECTIOM="correction","Stock correction"
+        RETURN="return","Customer return "
+
+    product=models.ForeignKey(Product,on_delete=models.PROTECT,related_name="stock_adjustment")

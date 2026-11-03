@@ -267,3 +267,57 @@ class StaffOrderAPITest(TestCase):
             response.status_code,
             status.HTTP_400_BAD_REQUEST,
         )
+
+    def test_order_list_can_be_sorted_by_total_amount(self):
+        Order.objects.create(
+            user=self.customer,
+            total_amount=Decimal("300.00"),
+            status=Order.Status.PENDING,
+            payment_status="pending",
+            stock_reserved= False,
+
+        )
+        Order.objects.create(
+            user=self.customer,
+            total_amount=Decimal("200.00"),
+            status=Order.Status.PENDING,
+            payment_status="pending",
+            stock_reserved= False,
+
+        )
+
+        request=self.factory.get(
+            "/api/staff/orders/",
+            {"ordering":"-total_amount"}
+        )
+        force_authenticate(request,user=self.warehouse_staff)
+        response=self.list_view(request)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["count"], 3)
+
+        amounts=[
+            Decimal(item["total_amount"])
+            for item in response.data["results"]
+        ]
+        self.assertEqual(amounts,sorted(amounts,reverse=True))
+
+    def test_order_list_pagination(self):
+        for amt in ["200.00","300.00"]:
+            Order.objects.create(
+            user=self.customer,
+            total_amount=Decimal(amt),
+            status=Order.Status.PENDING,
+            payment_status="pending",
+            stock_reserved=False,
+        )
+        request=self.factory.get(
+            "/api/staff/orders",
+            {"page":1,"page_size":1}
+        )
+        force_authenticate(request,user=self.warehouse_staff)
+        response=self.list_view(request)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["count"], 3)
+        self.assertEqual(len(response.data["results"]), 1)
+        self.assertIsNotNone(response.data["next"])
+        self.assertIsNone(response.data["previous"])

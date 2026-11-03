@@ -17,7 +17,7 @@ from ..fulfillment_services import update_order_fulfillment_status
 
 class StaffOrderPagination(PageNumberPagination):
     page_size=20
-    page_size_query_parem="page_size"
+    page_size_query_param="page_size"
     max_page_size=100
 class AdminOrderListView(generics.ListAPIView):
     serializer_class=AdminOrderSerializer
@@ -51,7 +51,7 @@ class AdminOrderListView(generics.ListAPIView):
         # Filter by order status
         order_status=params.get("status")
         if order_status:
-            queryset=queryset.filter(order_status=status)
+            queryset=queryset.filter(status=order_status)
 
         #filter by payment status
         payment_status=params.get("payment_status")
