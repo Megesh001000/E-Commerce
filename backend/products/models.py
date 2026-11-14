@@ -90,11 +90,24 @@ class ProductImage(models.Model):
 
     def __str__(self):
         return f"{self.product.name} - Image"
-class StockAdjustments(models.Model):
+class StockAdjustment(models.Model):
     class Reason(models.TextChoices):
         RESTOCK="restock","Restock"
         DAMAGED="damaged","Damaged stock"
         CORRECTIOM="correction","Stock correction"
-        RETURN="return","Customer return "
+        RETURN="return","Customer return"
 
-    product=models.ForeignKey(Product,on_delete=models.PROTECT,related_name="stock_adjustment")
+    product=models.ForeignKey(Product,on_delete=models.PROTECT,related_name="stock_adjustments")
+    adjusted_by=models.ForeignKey(settings.AUTH_USER_MODEL,on_delete=models.SET_NULL,null=True,blank=True,related_name="stock_adjustments")
+    quantity_change=models.IntegerField()
+    previous_stock=models.PositiveIntegerField()
+    new_stock=models.PositiveIntegerField()
+    reason=models.CharField(max_length=20,choices=Reason.choices)
+    note=models.CharField(max_length=255,blank=True)
+    created_at=models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return(
+            f"{self.product.name}: "
+            f"{self.quantity_change:+d} unit"
+        )
