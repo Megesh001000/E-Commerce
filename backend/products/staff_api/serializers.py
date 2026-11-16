@@ -1,4 +1,4 @@
-from rest_framwork import serializers
+from rest_framework import serializers
 
 from ..models import Product,StockAdjustment
 
@@ -19,7 +19,7 @@ class StaffInventoryProductSerializer(serializers.ModelSerializer):
 class StockAdjustmentCreateSerializer(serializers.Serializer):
     quantity_change=serializers.IntegerField()
 
-    reason=serializers.CharField(choices=StockAdjustment.Reason.choices)
+    reason=serializers.ChoiceField(choices=StockAdjustment.Reason.choices)
 
     note=serializers.CharField(max_length=255,required=False,allow_blank=True,default="")
 
@@ -49,3 +49,18 @@ class StockAdjustmentHistorySerializer(serializers.ModelSerializer):
             "created_at",
         ]
         read_only_fields = fields
+
+class StaffInventoryProductSerializer(serializers.ModelSerializer):
+    class Meta:
+        model=Product
+        fields=[
+            "id",
+            "name",
+            "category",
+            "brand",
+            "price",
+            "stock",
+            "low_stock_threshold",
+            "updated_at"
+        ]
+        read_only_fields=fields

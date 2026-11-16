@@ -16,6 +16,7 @@ urlpatterns = [
         "api/staff/orders/",
         include("orders.staff_api.urls"),
     ),
+    path("api/staff/inventory/",include("products.staff_api.urls"))
 ]
 
 urlpatterns+=static(

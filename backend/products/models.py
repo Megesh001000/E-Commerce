@@ -40,6 +40,8 @@ class Product(models.Model):
     description=models.TextField(blank=True)
     price=models.DecimalField(max_digits=10,decimal_places=2)
     stock=models.PositiveIntegerField(default=0)
+    low_stock_threshold=models.PositiveIntegerField(default=5,    help_text="Stock quantity at or below which this product is considered low."
+)
     brand=models.ForeignKey(Brand,on_delete=models.PROTECT,related_name="products",null=True,blank=True)
     slug=models.SlugField(unique=True,blank=True)
     created_at=models.DateTimeField(auto_now_add=True)
