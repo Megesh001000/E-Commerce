@@ -17,6 +17,7 @@ from .views import (
     StockAdjustmentCreateView,
     ProductStockAdjustmentHistoryView,
     LowStockProductListView,
+    InventorySummaryView,
 )
 
 User=get_user_model()
@@ -29,6 +30,7 @@ class StaffInventoryAPITest(TestCase):
         self.adjustment_view=StockAdjustmentCreateView.as_view()
         self.history_view=ProductStockAdjustmentHistoryView.as_view()
         self.low_stock_view=LowStockProductListView.as_view()
+        self.summary_view=InventorySummaryView.as_view()
 
         self.customer=User.objects.create_user(
             username="inventory_customer",
@@ -240,3 +242,42 @@ class StaffInventoryAPITest(TestCase):
         self.assertIn(str(low_product.pk), returned_ids)
         self.assertIn(str(threshold_product.pk), returned_ids)
         self.assertNotIn(str(normal_product.pk), returned_ids)
+
+    def test_inventory_staff_can_view_inventory_summary(self):
+
+        Product.objects.create(
+            name="Low Stock Product",
+            category=self.category,
+            price=Decimal("200.00"),
+            stock=3,
+            low_stock_threshold=5,
+        )
+
+        Product.objects.create(
+            name="Out Of Stock Product",
+            category=self.category,
+            price=Decimal("300.00"),
+            stock=0,
+            low_stock_threshold=5,
+        )
+
+        request = self.factory.get(
+            "/api/staff/inventory/summary/"
+        )
+
+        force_authenticate(
+            request,
+            user=self.inventory_staff,
+        )
+
+        response = self.summary_view(request)
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_200_OK,
+        )
+
+        self.assertEqual(response.data["total_products"], 3)
+        self.assertEqual(response.data["total_stock_units"], 13)
+        self.assertEqual(response.data["low_stock_products"], 2)
+        self.assertEqual(response.data["out_of_stock_products"], 1)

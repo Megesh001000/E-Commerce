@@ -1,4 +1,6 @@
 from .models import Cart,CartItem
+from products.models import Product
+from decimal import Decimal
 
 from rest_framework import serializers
 
@@ -52,5 +54,17 @@ class CartSerializer(serializers.ModelSerializer):
     def get_total(self,obj):
             return sum(
                 (item.product.price * item.quantity  for item in obj.items.all()),
-                start=0
+                start=Decimal("0.00")
             )
+class AddCartItemSerializer(serializers.Serializer):
+    product_id=serializers.PrimaryKeyRelatedField(
+        queryset=Product.objects.all(),
+        source="product",
+    )
+    quantity=serializers.IntegerField(
+         min_value=1,default=1,
+    )
+class UpdateCartItemSerializer(serializers.Serializer):
+    quantity = serializers.IntegerField(
+        min_value=1,
+    )

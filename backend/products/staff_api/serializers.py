@@ -12,6 +12,7 @@ class StaffInventoryProductSerializer(serializers.ModelSerializer):
             "brand",
             "price",
             "stock",
+            "low_stock_threshold",
             "updated_at"
         ]
         read_only_fields=fields
@@ -49,18 +50,3 @@ class StockAdjustmentHistorySerializer(serializers.ModelSerializer):
             "created_at",
         ]
         read_only_fields = fields
-
-class StaffInventoryProductSerializer(serializers.ModelSerializer):
-    class Meta:
-        model=Product
-        fields=[
-            "id",
-            "name",
-            "category",
-            "brand",
-            "price",
-            "stock",
-            "low_stock_threshold",
-            "updated_at"
-        ]
-        read_only_fields=fields

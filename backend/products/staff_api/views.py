@@ -4,7 +4,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.exceptions import NotFound,ValidationError
 
-from django.db.models import F
+from django.db.models import F,Q,Sum,Count
 
 from ..models import  Product,StockAdjustment
 from ..services import adjust_product_stock
@@ -103,7 +103,7 @@ class ProductStockAdjustmentHistoryView(generics.ListAPIView):
 class LowStockProductListView(generics.ListAPIView):
     serializer_class=StaffInventoryProductSerializer
     permission_classes=[IsInventoryStaff]
-    pagination_Class=InventoryPagination
+    pagination_class=InventoryPagination
 
     filter_backends=[filters.SearchFilter,filters.OrderingFilter]
 
@@ -117,15 +117,41 @@ class LowStockProductListView(generics.ListAPIView):
         "stock",
         "updated_at"
     ]
-    order=[
+    ordering=[
         "stock",
         "name"
     ]
 
-    def get_queryset(Self):
+    def get_queryset(self):
         return(
             Product.objects
             .select_related("category","brand")
             .filter(stock__lte=F("low_stock_threshold"))
 
         )
+
+class InventorySummaryView(APIView):
+    permission_classes=[IsInventoryStaff]
+    
+    def get(self,request):
+        summary=Product.objects.aggregate(
+            total_products=Count("id"),
+            total_stock_units=Sum("stock"),
+            low_stock_products=Count(
+                "id",
+                filter=Q(
+                    stock__lte=F("low_stock_threshold")
+                )         
+            ),
+            out_of_stock_products=Count(
+                "id",
+                filter=Q(stock=0),
+            ),
+        )
+
+        # Return 0 instead of None when there are no products
+        summary["total_stock_units"]=(
+            summary["total_stock_units"] or 0
+        )
+
+        return Response(summary)

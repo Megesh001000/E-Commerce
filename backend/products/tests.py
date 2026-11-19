@@ -13,7 +13,7 @@ from categories.models import Category
 from accounts.models import  User
 
 from django.urls import resolve
-from django.tests import override_settings
+from django.test import override_settings
 
 
 
@@ -249,6 +249,65 @@ class ProductAPITests(APITestCase):
         self.assertTrue(
             Product.objects.filter(id=product.id).exists()
         )
+    def test_staff_cannot_set_stock_when_creating_product(self):
+        category = Category.objects.create(name="Stock Test Category")
+
+        staff_user = User.objects.create_user(
+            username="stock_test_staff",
+            password="Test123",
+            is_staff=True,
+        )
+
+        self.client.force_authenticate(user=staff_user)
+
+        data = {
+            "name": "Stock Protected Product",
+            "category_id": str(category.id),
+            "price": "25000.00",
+            "stock": 999,
+        }
+
+        response = self.client.post(
+            "/api/products/",
+            data,
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+
+        product = Product.objects.get(name="Stock Protected Product")
+
+        self.assertEqual(product.stock, 0)
+
+    def test_staff_cannot_change_stock_through_product_patch(self):
+        category = Category.objects.create(name="Stock Update Category")
+
+        product = Product.objects.create(
+            name="Stock Protected Phone",
+            category=category,
+            price="20000.00",
+            stock=10,
+        )
+
+        staff_user = User.objects.create_user(
+            username="stock_update_staff",
+            password="Test123",
+            is_staff=True,
+        )
+
+        self.client.force_authenticate(user=staff_user)
+
+        response = self.client.patch(
+            f"/api/products/{product.id}/",
+            {"stock": 999},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        product.refresh_from_db()
+
+        self.assertEqual(product.stock, 10)
 
 
 

@@ -4,7 +4,8 @@ from .views import (
     InventoryProductDetailView,
     StockAdjustmentCreateView,
     ProductStockAdjustmentHistoryView,
-    LowStockProductListView
+    LowStockProductListView,
+    InventorySummaryView,
 )
 
 app="staff_inventory"
@@ -15,4 +16,5 @@ urlpatterns=[
     path("<uuid:pk>/adjustments/",StockAdjustmentCreateView.as_view(),name="stock-adjustment"),
     path("<uuid:pk>/adjustments/history/",ProductStockAdjustmentHistoryView.as_view(),name="stock-adjustment-history"),
     path("low-stock/",LowStockProductListView.as_view(),name="low-stock-products"),
+    path("summary/",InventorySummaryView.as_view(),name="inventory-summary"),
 ]

@@ -71,7 +71,7 @@ class ProductListAPI(APIView):
 
         if min_value:
             products=products.filter(price__gte=min_value)
-        if max_value:
+        if max_value is not None:
             products=products.filter(price__lte=max_price)
 
 

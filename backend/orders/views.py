@@ -36,7 +36,9 @@ class CheckOutView(APIView):
             )
 
         cart_items=list(
-            cart.items.select_related("product").all()
+            cart.items
+            .select_related("product")
+            .order_by("product_id")
         )
         if not cart_items:
             return Response(
@@ -119,7 +121,9 @@ class CancelOrderView(APIView):
 
         if order.stock_reserved:
             order_items=list(
-                order.items.select_related("product").all()
+                order.items
+                .select_related("product")
+                .order_by("product_id")
             )
 
             for item in order_items:

@@ -3,127 +3,141 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
-from rest_framework.exceptions import ValidationError
+from rest_framework.exceptions import ValidationError,NotFound
+
+from django.db import transaction
 
 from products.models import Product
 from .models import CartItem,Cart
-from .serializers import CartItemSerializer,CartSerializer
+from .serializers import CartItemSerializer,CartSerializer,AddCartItemSerializer,UpdateCartItemSerializer
+
 
 class CartAPI(APIView):
+    permission_classes=[IsAuthenticated]
     def get(self,request):
         cart,created=Cart.objects.get_or_create(user=request.user)
-
+        cart=(
+            Cart.objects
+            .prefetch_related("items__product")
+            .get(pk=cart.pk)
+        )
         serializer=CartSerializer(cart)
         return Response(serializer.data,status=status.HTTP_200_OK)
 
 class CartItemAdd(APIView):
+    permission_classes=[IsAuthenticated]
+
+    @transaction.atomic()
     def post(self,request):
-        product_id=request.data.get("product")
-        quantity=request.data.get("quantity",1)
-
-        if not product_id:
-             return Response(
-                {"error": "Product ID is required."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        try:
-            quantity=int(quantity)
-        except (TypeError,ValueError):
-             return Response(
-                {"error": "Quantity must be a whole number."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        if quantity <1 :
-            return Response(
-                {"error": "Quantity must be at least 1."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        try:
-            product=Product.objects.get(id=product_id)
-        except (Product.DoesNotExist,ValueError):
-            return Response(
-                {"error":"Product nor found."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        cart,created=Cart.objects.get_or_create(
-            user=request.user
+        serializer=AddCartItemSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        #lock cart
+        cart,created=(
+                Cart.objects
+                .select_for_update()
+                .get_or_create(user=request.user)
         )
-
-        cart_item,item_created=CartItem.objects.get_or_create(
-            cart=cart,
-            product=product,
-            defaults={"quantity":quantity}
+        requested_product=serializer.validated_data["product"]
+        #lock product row
+        try:
+            product=Product.objects.select_for_update().get(pk=requested_product.pk)
+        except Product.DoesNotExist:
+            raise NotFound("Product not found.")
+        quantity=serializer.validated_data["quantity"]
+        cart_item=(
+            CartItem.objects
+            .select_for_update()
+            .filter(
+                cart=cart,
+                product=product
+            )
+            .first()
         )
-        if not item_created:
-            cart_item.quantity+=quantity
+        if cart_item:
+            new_quantity=cart_item.quantity+quantity
+        else:
+            new_quantity=quantity
+
+        if new_quantity>product.stock:
+             raise ValidationError({
+                "quantity": (
+                    f"Only {product.stock} units are currently available."
+                )
+            })
+
+       
+        if  cart_item is not None:
+            cart_item.quantity=new_quantity
             cart_item.save(update_fields=["quantity"])
+            response_status=status.HTTP_200_OK
+        else:
+            CartItem.objects.create(
+                cart=cart,
+                product=product,
+                quantity=quantity
+            )
+            response_status=status.HTTP_201_CREATED
 
         return Response(
             CartSerializer(cart).data,
-            status=status.HTTP_200_OK if not item_created else status.HTTP_201_CREATED
+            status=response_status
 
         )
 
 class CartItemUpdate(APIView):
     permission_classes=[IsAuthenticated]
+    @transaction.atomic()
     def patch(self,request,item_id):
-        try:
-            quantity=int(request.data.get("quantity"))
-        except (TypeError,ValueError):
-            return Response(
-                {"error":"Quantity must be a whole number."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
 
-        if quantity <1:
-            return Response(
-                {"error":"Quantity must be at least 1."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
+        serializer=UpdateCartItemSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+      
         try:
-            cart=Cart.objects.get(user=request.user)
-            cart_item=CartItem.objects.get(
+            cart=Cart.objects.select_for_update().get(
+                user=request.user
+            )
+            cart_item=CartItem.objects.select_for_update().get(
                 id=item_id,
-                cart=cart
+                cart=cart,
             )
         except (Cart.DoesNotExist,CartItem.DoesNotExist):
-            return Response(
-                {"error":"Cart item not found"},
-                status=status.HTTP_404_NOT_FOUND
-            )
+            raise NotFound("Cart item not found.")
+        product=Product.objects.select_for_update().get(
+            pk=cart_item.product_id
+        )
+        quantity=serializer.validated_data["quantity"]
+        if quantity >product.stock:
+            raise ValidationError({
+                "quantity": (
+                    f"Only {product.stock} units are currently available."
+                )
+            })
 
         cart_item.quantity=quantity
         cart_item.save(update_fields=["quantity"])
 
         return Response(
             CartSerializer(cart).data,
-            status=status.HTTP_200_OK
+            status=status.HTTP_200_OK,
+
         )
+
+    @transaction.atomic()
     def delete(self,request,item_id):
-            try:
-                cart=Cart.objects.get(user=request.user)
-                cart_item=CartItem.objects.get(
-                    id=item_id,
-                    cart=cart
-                )
-            except (Cart.DoesNotExist,CartItem.DoesNotExist):
-                return Response(
-                    {"error":"Cart item not found."},
-                    status=status.HTTP_404_NOT_FOUND,
-                )
-            cart_item.delete()
-            return Response(
-                {"message": "Item removed from cart successfully."},
-                status=status.HTTP_200_OK,
+        try:
+            cart=Cart.objects.select_for_update().get(user=request.user)
+            cart_item=CartItem.objects.select_for_update().get(
+                id=item_id,
+                cart=cart
             )
-    
-    
-            
-# class CartItemDelete(APIView):
-#     permissions_classes=[IsAuthenticated]
-    
+        except (Cart.DoesNotExist,CartItem.DoesNotExist):
+            return Response(
+                {"error":"Cart item not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        cart_item.delete()
+        return Response(
+            {"message": "Item removed from cart successfully."},
+            status=status.HTTP_200_OK,
+        )
+
