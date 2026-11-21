@@ -23,6 +23,9 @@ RAZORPAY_WEBHOOK_SECRET = os.getenv("RAZORPAY_WEBHOOK_SECRET")
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+CORS_ALLOWED_ORIGINS = [
+    "http://localhost:5173",
+]
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/
@@ -51,8 +54,8 @@ INSTALLED_APPS = [
       "corsheaders",
         "rest_framework_simplejwt.token_blacklist",
 
-
-    'accounts',
+    'axes',
+    'accounts.apps.AccountsConfig',
     'categories',
     'products',
     'cart',
@@ -60,16 +63,25 @@ INSTALLED_APPS = [
 
 
 
+
+
 ]
 
+AUTHENTICATION_BACKENDS=[
+    "axes.backends.AxesStandaloneBackend",
+    "django.contrib.auth.backends.ModelBackend",
+]
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
+    'corsheaders.middleware.CorsMiddleware',
+
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'axes.middleware.AxesMiddleware'
 ]
 
 REST_FRAMEWORK={
@@ -96,7 +108,7 @@ REST_FRAMEWORK={
 SIMPLE_JWT={
     "ACCESS_TOKEN_LIFETIME":timedelta(minutes=15),
     "REFRESH_TOKEN_LIFETIME":timedelta(days=7),
-    "ROTATE_REFRESH_TOKEN":True,
+    "ROTATE_REFRESH_TOKENS":True,
     "BLACKLIST_AFTER_ROTATION":True
 }
 
@@ -154,6 +166,8 @@ AUTH_PASSWORD_VALIDATORS = [
 ]
 
 
+
+
 # Internationalization
 # https://docs.djangoproject.com/en/6.0/topics/i18n/
 
@@ -198,3 +212,11 @@ DEFAULT_FROM_EMAIL=os.getenv(
 
 EMAIL_TIMEOUT=10
 
+
+AXES_FAILURE_LIMIT=5
+AXES_COOLOFF_TIME=timedelta(minutes=30)
+AXES_USE_ATTEMPT_EXPIRATION=True
+AXES_LOOKOUT_PARAMETERS=[
+    ["username","ip_address"]
+]
+AXES_RESET_ON_SUCCESS=True

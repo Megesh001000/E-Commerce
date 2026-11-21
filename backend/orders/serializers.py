@@ -3,7 +3,7 @@ from rest_framework import serializers
 from django.db import transaction
 
 class OrderItemSerializer(serializers.ModelSerializer):
-    subtotal=serializers.ReadOnlyField()
+    subtotal=serializers.ReadOnlyField(source="sub_total")
 
     class Meta:
         model=OrderItem
@@ -11,6 +11,7 @@ class OrderItemSerializer(serializers.ModelSerializer):
             "id",
             "product",
             "product_name",
+
             "price",
             "quantity",
             "subtotal"
@@ -27,6 +28,8 @@ class OrderSerializer(serializers.ModelSerializer):
         fields=[
             "id",
             "status",
+            "fulfillment_status",
+            "payment_status",
             "total_amount",
             "items",
             "created_at",

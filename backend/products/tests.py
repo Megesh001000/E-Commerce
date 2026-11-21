@@ -14,13 +14,11 @@ from accounts.models import  User
 
 from django.urls import resolve
 from django.test import override_settings
-
-
-
-
-
+from django.core.cache import cache
 
 class ProductAPITests(APITestCase):
+    def setUp(self):
+        cache.clear()
 
     def test_product_list_returns_200(self):  #Test For Getting product
         response=self.client.get('/api/products/')

@@ -6,6 +6,7 @@ from django.urls import path,include
 
 
 
+
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/',include('accounts.urls')),
@@ -16,8 +17,10 @@ urlpatterns = [
         "api/staff/orders/",
         include("orders.staff_api.urls"),
     ),
-    path("api/staff/inventory/",include("products.staff_api.urls"))
+    path("api/staff/inventory/",include("products.staff_api.urls")),
+
 ]
+  
 
 urlpatterns+=static(
     settings.MEDIA_URL,

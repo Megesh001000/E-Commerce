@@ -19,7 +19,7 @@ class RegisterAPI(APIView):
 
             return Response(
                 {
-                    "message":"User Logged in successfully"
+                    "message":"User registered successfully"
                 },
                 status=status.HTTP_201_CREATED
             )
@@ -28,7 +28,7 @@ class RegisterAPI(APIView):
 
 class LoginAPI(APIView):
     def post(self,request):
-        serializer=LoginSerializer(data=request.data)
+        serializer=LoginSerializer(data=request.data,context={"request":request})
 
         if serializer.is_valid():
             return Response(serializer.validated_data)

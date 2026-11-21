@@ -1,5 +1,5 @@
 from django.urls import path,include
-from .views import CheckOutView,CancelOrderView,CreateRazorpayOrderView,VerifyRazorpayPaymentView,RazorpayWebhookView,DeliveryAddressDetailView,DeliveryAddressListCreateView
+from .views import CheckOutView,CancelOrderView,CreateRazorpayOrderView,VerifyRazorpayPaymentView,RazorpayWebhookView,DeliveryAddressDetailView,DeliveryAddressListCreateView,CustomerOrderListView,CustomerOrderDetailView
 
 urlpatterns=[
     path("checkout/",CheckOutView.as_view(),name="checkout"),
@@ -9,6 +9,7 @@ urlpatterns=[
     path("webhook/razorpay/",RazorpayWebhookView.as_view(),name="razorpay-webhook"),
     path("delivery-addresses/",DeliveryAddressListCreateView.as_view(),name="delivery-address-list-create"),
     path("delivery-addresses/<uuid:pk>/",DeliveryAddressDetailView.as_view(),name="delivery-address-detail-create"),
-
+    path("orders/",CustomerOrderListView.as_view(),name="order-history"),
+    path("orders/<uuid:order_id>",CustomerOrderDetailView.as_view(),name="order-detail")
 
 ]

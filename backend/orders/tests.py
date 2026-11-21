@@ -5,8 +5,9 @@ from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase,override_settings
+from django.urls import reverse
 
-from rest_framework.test import APIRequestFactory,force_authenticate
+from rest_framework.test import APIRequestFactory,force_authenticate,APITestCase
 
 from .services import process_captured_payment,confirm_captured_payment,create_razorpay_order
 
@@ -19,6 +20,8 @@ from .views import (
                     CreateRazorpayOrderView,
                     DeliveryAddressDetailView,
                     DeliveryAddressListCreateView,
+                    CustomerOrderDetailView,
+                    CustomerOrderListView
                 )
 from cart.models import Cart, CartItem
 from categories.models import Category
@@ -1157,7 +1160,7 @@ class DeliveryAddressAPITests(TestCase):
         self.assertEqual(response.status_code, 200)
         address.refresh_from_db()
         self.assertEqual(address.label, "Office")
-    def user_can_access_another_user_address(self):
+    def test_user_can_access_another_user_address(self):
         address=self.make_address(user=self.other_user)
         request = self.factory.get(
             f"/delivery-addresses/{address.pk}/"
@@ -1276,3 +1279,199 @@ class OrderConfirmationEmailTriggerTests(TestCase):
         self.assertEqual(order.status, Order.Status.CONFIRMED)
         self.assertFalse(order.stock_reserved)
         self.assertEqual(order.payment_status, "captured")
+
+
+class CustomerOrderAPITests(TestCase):
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username="order_history_user",
+            password="test-password",
+        )
+
+        self.other_user = User.objects.create_user(
+            username="other_order_user",
+            password="test-password",
+        )
+
+        self.factory = APIRequestFactory()
+
+        self.list_view = CustomerOrderListView.as_view()
+        self.detail_view = CustomerOrderDetailView.as_view()
+
+        self.category = Category.objects.create(
+            name="Order History Category"
+        )
+
+        self.product = Product.objects.create(
+            name="Order History Product",
+            category=self.category,
+            price=Decimal("25.00"),
+            stock=10,
+        )
+
+    def make_order(self, user, amount="50.00"):
+        return Order.objects.create(
+            user=user,
+            total_amount=Decimal(amount),
+            status=Order.Status.PENDING,
+            payment_status="pending",
+            stock_reserved=True,
+        )
+
+    def test_user_can_view_only_own_order_history(self):
+        own_order = self.make_order(self.user)
+        other_order = self.make_order(self.other_user)
+
+        request = self.factory.get("/api/orders/")
+        force_authenticate(request, user=self.user)
+
+        response = self.list_view(request)
+
+        self.assertEqual(response.status_code, 200)
+
+        # Support both paginated and non-paginated responses.
+        results = (
+            response.data["results"]
+            if isinstance(response.data, dict) and "results" in response.data
+            else response.data
+        )
+
+        returned_ids = {
+            str(order["id"])
+            for order in results
+        }
+
+        self.assertEqual(
+            returned_ids,
+            {str(own_order.id)},
+        )
+
+        self.assertNotIn(str(other_order.id), returned_ids)
+
+    def test_user_can_view_own_order_details(self):
+        order = self.make_order(self.user)
+
+        OrderItem.objects.create(
+            order=order,
+            product=self.product,
+            product_name=self.product.name,
+            price=self.product.price,
+            quantity=2,
+        )
+
+        request = self.factory.get(
+            f"/api/orders/{order.id}/"
+        )
+        force_authenticate(request, user=self.user)
+
+        response = self.detail_view(
+            request,
+            order_id=order.id,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(str(response.data["id"]), str(order.id))
+        self.assertEqual(len(response.data["items"]), 1)
+        self.assertEqual(response.data["items"][0]["quantity"], 2)
+
+    def test_user_cannot_view_another_users_order(self):
+        order = self.make_order(self.other_user)
+
+        request = self.factory.get(
+            f"/api/orders/{order.id}/"
+        )
+        force_authenticate(request, user=self.user)
+
+        response = self.detail_view(
+            request,
+            order_id=order.id,
+        )
+
+        self.assertEqual(response.status_code, 404)
+
+    def test_unauthenticated_user_cannot_view_order_history(self):
+        request = self.factory.get("/api/orders/")
+
+        response = self.list_view(request)
+
+        self.assertEqual(response.status_code, 401)
+
+    def test_unauthenticated_user_cannot_view_order_details(self):
+        order = self.make_order(self.user)
+
+        request = self.factory.get(
+            f"/api/orders/{order.id}/"
+        )
+
+        response = self.detail_view(
+            request,
+            order_id=order.id,
+        )
+
+        self.assertEqual(response.status_code, 401)
+
+class CustomerOrderURLTests(APITestCase):
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username="url_order_user",
+            password="test-password",
+        )
+
+        self.other_user = User.objects.create_user(
+            username="url_other_user",
+            password="test-password",
+        )
+
+        self.own_order = Order.objects.create(
+            user=self.user,
+            total_amount=Decimal("100.00"),
+        )
+
+        self.other_order = Order.objects.create(
+            user=self.other_user,
+            total_amount=Decimal("200.00"),
+        )
+
+    def test_order_history_url(self):
+        self.client.force_authenticate(user=self.user)
+        response=self.client.get(reverse("order-history"))
+        self.assertEqual(response.status_code,200)
+
+    def test_order_detail_url(self):
+        self.client.force_authenticate(user=self.user)
+        response=self.client.get(reverse("order-detail",kwargs={"order_id":self.own_order.id}))
+        self.assertEqual(response.status_code,200)
+    def test_customer_cannot_access_another_users_order_url(self):
+        self.client.force_authenticate(user=self.user)
+
+        response = self.client.get(
+            reverse(
+                "order-detail",
+                kwargs={"order_id": self.other_order.id},
+            )
+        )
+
+        self.assertEqual(response.status_code, 404)
+
+    def test_order_history_requires_authentication(self):
+        response = self.client.get(reverse("order-history"))
+
+        self.assertEqual(response.status_code, 401) 
+    def test_customer_cannot_access_another_users_order_url(self):
+        self.client.force_authenticate(user=self.user)
+
+        response = self.client.get(
+            reverse(
+                "order-detail",
+                kwargs={"order_id": self.other_order.id},
+            )
+        )
+
+        self.assertEqual(response.status_code, 404)
+
+    def test_order_history_requires_authentication(self):
+        response = self.client.get(reverse("order-history"))
+
+        self.assertEqual(response.status_code, 401)
