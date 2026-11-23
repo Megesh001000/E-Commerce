@@ -1,0 +1,14 @@
+:root{
+   --color-bg: #F7F4ED;
+    --color-dark: #222033;
+    --color-primary: #6854DE;
+    --color-accent: #FF795C;
+    --color-mint: #BCE6D0;
+}
+
+body{
+  margin:0;
+  background-color:var(--color-bg);
+  color:var(--color-dark);
+  font-family: Arial, sans-serif;
+}
