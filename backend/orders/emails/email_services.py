@@ -24,25 +24,28 @@ NOTIFICATION_DETAILS={
         "message":"Your order has been cancelled.",
 
     },
-    OrderEmailNotification.NotificationType.PROCESSING:{
-        "subject":"We are preparing your order",
-        "heading":"Order proceesing",
-        "message":"We are preparing you items for dispatch.",
+    OrderEmailNotification.NotificationType.PROCESSING: {
+        "subject": "We are preparing your order",
+        "heading": "Order processing",
+        "message": "We are preparing your items for dispatch.",
     },
     OrderEmailNotification.NotificationType.SHIPPED:{
         "subject":"Your order has been shipped",
         "heading":"Order shipped!",
         "message":"Your order has been dispatched.",
     },
-    OrderEmailNotification.NotificationType.OUT_FOR_DELIVERY:{
-        "subject":"Your order is out for delivery",
-        "heading":"Out for delivery ",
-        "message":"your order is on it's way to your delivery address.",
+    
+
+    OrderEmailNotification.NotificationType.OUT_FOR_DELIVERY: {
+        "subject": "Your order is out for delivery",
+        "heading": "Out for delivery",
+        "message": "Your order is on its way to your delivery address.",
     },
-    OrderEmailNotification.NotificationType.DELIVERED:{
-        "subject":"Your order has been delivered",
-        "heading":"Delivery ",
-        "message":"your order has been marked as delivered. Thank you for shopping with us.",
+
+    OrderEmailNotification.NotificationType.DELIVERED: {
+        "subject": "Your order has been delivered",
+        "heading": "Delivery completed",
+        "message": "Your order has been delivered. Thank you for shopping with us.",
     },
 }
 

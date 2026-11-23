@@ -7,8 +7,7 @@ Hello{% if order.user.first_name %} {{ order.user.first_name }}{% else %} {{ ord
 
 
 Order Number: {{ order.id }}
-order Date: {{ order.created_at }}
-
+order Date: {{ order.created_at|date:"d M Y, h:i A" }}
 Items:
 {% for item in items %}
 - {{ item.product_name }} | Quantity: {{ item.quantity }} | Unit price: ₹{{ item.price }} | Subtotal: ₹{{ item.sub_total}}

@@ -3,10 +3,13 @@ from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.core  import mail
+from django.core.mail import EmailMultiAlternatives
 from django.test import TestCase,override_settings
 
 from .email_services import send_order_notification
-from ..models import Order,OrderEmailNotification
+from ..models import Order,OrderEmailNotification,OrderItem
+from categories.models import Category
+from products.models import Product
 
 User=get_user_model()
 @override_settings(
@@ -40,6 +43,24 @@ class OrderEmailServiceTest(TestCase):
                 "longitude": "80.100000",
             },
         )
+        category = Category.objects.create(
+                name="Email Test Category"
+        )
+
+        product = Product.objects.create(
+            name="Test Smartphone",
+            category=category,
+            price=Decimal("125.00"),
+            stock=10,
+        )
+
+        OrderItem.objects.create(
+            order=self.order,
+            product=product,
+            product_name=product.name,
+            price=Decimal("125.00"),
+            quantity=1,
+        )
     def test_confirmation_email_is_sent_and_recorded(self):
         result=send_order_notification(
           self.order.pk,
@@ -59,6 +80,11 @@ class OrderEmailServiceTest(TestCase):
             message.to,
             ["customer@example.com"],
         )
+
+        self.assertIn("Test Smartphone", message.body)
+        self.assertIn("Quantity: 1", message.body)
+        self.assertIn("125.00", message.body)
+
         self.assertIn(str(self.order.pk), message.body)
         self.assertIn("10 Main Street", message.body)
         self.assertEqual(len(message.alternatives), 1)
@@ -146,3 +172,57 @@ class OrderEmailServiceTest(TestCase):
             )
 
         self.assertEqual(len(mail.outbox), 0)
+
+
+    def test_failed_notification_can_be_retried(self):
+
+        original_send = EmailMultiAlternatives.send
+        calls = 0
+
+        def fail_once_then_send(email_message, *args, **kwargs):
+            nonlocal calls
+            calls += 1
+
+            if calls == 1:
+                raise ConnectionError("SMTP temporarily unavailable")
+
+            return original_send(email_message, *args, **kwargs)
+
+        notification_type = (
+            OrderEmailNotification.NotificationType.ORDER_CONFIRMED
+        )
+
+        with patch(
+            "orders.emails.email_services.EmailMultiAlternatives.send",
+            new=fail_once_then_send,
+        ):
+            with self.assertLogs(
+                "orders.emails.email_services",
+                level="ERROR",
+            ):
+                first_result = send_order_notification(
+                    self.order.pk,
+                    notification_type,
+                )
+
+            second_result = send_order_notification(
+                self.order.pk,
+                notification_type,
+            )
+
+        self.assertEqual(first_result, "failed")
+        self.assertEqual(second_result, "sent")
+        self.assertEqual(len(mail.outbox), 1)
+
+        notification = OrderEmailNotification.objects.get(
+            order=self.order,
+            notification_type=notification_type,
+        )
+
+        self.assertEqual(
+            notification.status,
+            OrderEmailNotification.Status.SENT,
+        )
+        self.assertEqual(notification.attempts, 2)
+        self.assertEqual(notification.last_error, "")
+        self.assertIsNotNone(notification.sent_at)
