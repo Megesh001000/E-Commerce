@@ -4,7 +4,7 @@ from django.db.models import Q
 
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from rest_framework.permissions import BasePermission
+from rest_framework.permissions import BasePermission,AllowAny,IsAuthenticated
 from rest_framework import status
 from rest_framework.pagination import PageNumberPagination
 
@@ -17,7 +17,11 @@ from .serializer import ProductSerializer
 
 
 class ProductListAPI(APIView):
-    permission_classes=[IsStaffUser]
+    def get_permissions(self):
+            if self.request.method == "GET":
+                return [AllowAny()]
+            return [IsStaffUser()]
+
     def get(self,request):
         products=Product.objects.all()
         
@@ -57,7 +61,7 @@ class ProductListAPI(APIView):
             (min_value is not None and min_value <=0) or (max_value is not None and max_value <=0 )
         ):  #check for number is not negative or 0
             return Response(
-                {"error": "Prices cannot be negative."},
+                {"error": "Prices must be greater than zero."},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
@@ -72,7 +76,7 @@ class ProductListAPI(APIView):
         if min_value:
             products=products.filter(price__gte=min_value)
         if max_value is not None:
-            products=products.filter(price__lte=max_price)
+            products=products.filter(price__lte=max_value)
 
 
         in_stock=request.query_params.get("in_stock")
@@ -128,7 +132,10 @@ class ProductListAPI(APIView):
             )
 
 class ProductDetailAPI(APIView):
-    permission_classes=[IsStaffUser]
+    def get_permissions(self):
+        if self.request.method == "GET":
+            return [AllowAny()]
+        return [IsStaffUser()]
 
     def get(self,request,pk):
         product=get_object_or_404(Product,pk=pk)
