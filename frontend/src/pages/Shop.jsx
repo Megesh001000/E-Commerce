@@ -17,7 +17,6 @@ const categoryGroups = {
 function Shop() {
     const [searchParams]=useSearchParams();
     const selectedCategory = searchParams.get('category');
-
     const [products,setProducts]=useState([]);
     const [loading,setLoading]=useState(true);
     const [error,setError]=useState('');

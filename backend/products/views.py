@@ -33,7 +33,7 @@ class ProductListAPI(APIView):
             )
         if search:
             products=products.filter(
-                Q(name__icontains=search)|Q(description__icontains=search)
+                Q(name__icontains=search)|Q(description__icontains=search)|Q(slug__icontains=search)
             )
 
         category=request.query_params.get("category","").strip()    #Category Filter

@@ -1,7 +1,9 @@
 .nova-navbar{
-    background:var(--color-bg);
+    /* background:rgb(237, 216, 173); */
+    background: #F2E7D2;
+
     padding: 22px 0;
-    border-bottom:1px solid rgba(34, 32, 51, 0.1); ;
+    border-bottom:1px solid  #E8DDCA ;
 }
 
 .nova-brand{
