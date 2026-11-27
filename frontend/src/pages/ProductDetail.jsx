@@ -2,9 +2,37 @@ import { useParams } from "react-router-dom";
 import { useState,useEffect } from "react";
 
 import "./ProductDetail.css"
+import productDetails from "../data/ProductDetails"
+import reviewsData from "../data/reviewsData";
 
 const API_URL = 'http://127.0.0.1:8000/api/products/';
 
+function RatingStars({rating,color}){
+    return(
+        <div className="rating-stars">
+            {[1,2,3,4,5].map(star=>{
+                const fill=Math.min(
+                    Math.max(rating-(star-1),0),
+                    1
+                );
+                return(
+                    <span className="rating-star" key={star}>
+                        ★
+                        <span 
+                            className="rating-star-fill" 
+                            style={{width:`${fill * 100}%`,color:color}}
+                             
+                        >
+                             ★
+                        </span>
+                    </span>
+                )
+                
+            })}
+           
+        </div>
+    )
+}
 function ProductDetail(){
     const {slug}=useParams();
     const [product,setProduct]=useState(null);
@@ -12,13 +40,19 @@ function ProductDetail(){
     const [error,setError]=useState('');
     const[quantity,setQuantity]=useState(1);
     const [selectedImage,setSelectedImage]=useState(null);
+    const [openSection,setOpenSection]=useState('highlights')
 
+    const [reviewReaction,setReviewReaction]=useState({})
+    const [replyOpen,setReplyOpen]=useState({})
+    const [replyTexts,setReplyTexts]=useState({})
+    const [postedReplies,setPostedReplies]=useState({})
 
     useEffect(()=>{
         async function fetchProduct() {
             try{
                 setLoading(true);
                 setError('');
+
 
                 const response=await fetch(`${API_URL}?search=${slug}`);
 
@@ -50,10 +84,30 @@ function ProductDetail(){
 
     if (loading) return <p>Loading product...</p>;
     if (error) return <p>{error}</p>;
+    const extraDetails=productDetails[product.slug] ||{
+        highlights:[],
+        specifications:[]
+    };
 
-    const primaryImage=product.images?.find(
-        image=>image.is_primary
-    );
+    const reviewData=reviewsData[product.slug]||{
+        averageRating:0,
+        totalReviews:0,
+        ratingBreakdown:[],
+        comments:[]
+    };
+    const getRatingColor=(rating)=>{
+        if (rating >=4) return  "#16A34A"; // green
+        if(rating>=3) return  "#E9A23B"; // orange
+        return "#DC2626"; // red
+
+    }
+
+    const handleReviewReaction =(reviewId,reaction)=>{
+        setReviewReaction(prev=>({
+            [reviewId]:prev[reviewId]===reaction?null:reaction
+        }))
+    }
+    
 
     const productImages=product.images?.filter(image=>image.image||image.image_url) || [];
 
@@ -63,13 +117,12 @@ function ProductDetail(){
         }
         return image.image_url||'';
     }
-    const imageUrl=primaryImage?.image?`http://127.0.0.1:8000${primaryImage.image}`: primaryImage?.image_url || '';
 
   return (
     <main className="product-detail-page">
         <div className="container">
             <div className="product-detail-layout">
-                <div className="product0gallery">
+                <div className="product-gallery">
                     <div className="product-detail-image">
                         {/* main image */}
                         {selectedImage ? (
@@ -145,8 +198,94 @@ function ProductDetail(){
                             {product.stock >0 ? "Add to Cart":"Out of Stock"}
                     </button>
                 </div>  
-            </div>      
+            </div>  
+            <section className="product-extra-details">
+                <div className="detail-accordion">
+                    <button 
+                        className="detail-accordion-header"
+                        onClick={()=>setOpenSection(openSection==='highlights' ? null:"highlights")} 
+                    >
+                        <h2>Product Highlights</h2>
+                        <span>{openSection==="highlights"?"-":"+"}</span>
+
+                    </button>
+                    {openSection ==="highlights" && (
+                        <div className="detail-accordion-content">
+                            <ul>
+                                {extraDetails.highlights.map((item,index)=>(
+                                    <li key={index}>{item}</li>
+                                ))}
+                            </ul>
+                        </div>
+                    )}
+                </div>
+                {/* specifications */}
+                <div className="detail-accordion">
+                    <button
+                        className="detail-accordion-header"
+                        onClick={()=>setOpenSection(openSection==="specifications"?null:"specifications")}
+                    >
+                        <h2>Specifications</h2>
+                        <span>{openSection==="specifications"?"-":"+"}</span>
+
+                    </button>
+                    {openSection==="specifications" &&(
+                        <div className="detail-accordion-content">
+                            {extraDetails.specifications.map((item,index)=>(
+                                <div className="specification-row" key={index}>
+                                    <span>{item.label}</span>
+                                    <strong>{item.value}</strong>
+                                </div>
+                            ))}
+                        </div>
+
+                    )}
+                </div>
+            </section>    
+            <section className="product-reviews">
+                <h2>Customer Reviews</h2>
+                
+                <div className="rating-summary">
+                    {/* left - avg rating*/}
+
+                    <div className="rating-overview">
+                        <h3>{reviewData.averageRating.toFixed(1)}</h3>
+                        <RatingStars
+                            rating={reviewData.averageRating}
+                            color={getRatingColor(reviewData.averageRating)}
+                        />
+                        <p>{reviewData.totalReviews} customer reviews</p>
+                    </div>
+                    {/* Right: Rating distribution */}
+                    <div className="rating-breakdown">
+                        {reviewData.ratingBreakdown.map(item=>(
+                            <div className="rating-bar-row" key={item.stars}>
+                                <span>{item.stars} ★</span>
+
+                                <div className="rating-bar">
+                                    <div 
+                                        className="rating-bar-fill"
+                                        style={{
+                                            width: reviewData.totalReviews >0
+                                            ? `${(item.count/reviewData.totalReviews)*100}%`
+                                            : "0%",
+                                            backgroundColor:getRatingColor(item.stars)
+                                        }}
+                                        
+                                    />  
+                                </div>
+                                <span>{item.count}</span>
+                            </div>
+                        ))}
+                    </div> 
+                </div>
+
+                <div className="review-list">
+                    <h3>REcent Reviews</h3>
+                </div>
+            </section>
         </div>
+       
     </main>
   )
 }
