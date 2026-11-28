@@ -1,6 +1,7 @@
 import { useSearchParams } from 'react-router-dom';
 import { useEffect,useState } from 'react';
 import './Shop.css'
+import { useWishlist } from '../context/WishlistContext';
 const API_URL = 'http://127.0.0.1:8000/api/products/';
 const categoryGroups = {
     Electronics: [
@@ -21,6 +22,7 @@ function Shop() {
     const [loading,setLoading]=useState(true);
     const [error,setError]=useState('');
 
+    const [toggleWishlist,isWishlisted]=useWishlist();
 
 
 
@@ -56,8 +58,10 @@ function Shop() {
                         category=>category.toLowerCase()===productCategory
                     );
                 }
-                return -productCategory==selectedCategory.toLowerCase;;
+                return-productCategory==selectedCategory.toLowerCase();
             }):products;
+        
+        
 
 
     return(
@@ -102,6 +106,17 @@ function Shop() {
                                 return(
                                     <article className="shop-product-card" key={product.id}>
                                         <div className="shop-product-image">
+                                            <button 
+                                                className={`wishlist-heart ${isWishlisted(product.id) ?'allow':''}`}
+                                                onClick={()=>toggleWishlist(product)}
+                                                aria-label="Add to wishlist"
+                                                title="Add to wishlist"
+                                            >
+                                                {isWishlisted(product.id) ? '♥' : '♡'}
+                                                                                        
+                                                                                        
+
+                                            </button>
                                             {imageUrl ?(
                                                 <img
                                                     src={imageUrl}
@@ -117,7 +132,7 @@ function Shop() {
                                                         Image coming soon
                                                     </div>
                                                 )
-                                            };
+                                            }
                                         </div>
 
                                         <div className="shop-product-info">

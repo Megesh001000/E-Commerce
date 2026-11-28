@@ -104,6 +104,7 @@ function ProductDetail(){
 
     const handleReviewReaction =(reviewId,reaction)=>{
         setReviewReaction(prev=>({
+            ...prev,
             [reviewId]:prev[reviewId]===reaction?null:reaction
         }))
     }
@@ -281,7 +282,110 @@ function ProductDetail(){
                 </div>
 
                 <div className="review-list">
-                    <h3>REcent Reviews</h3>
+                    <h3>Recent Reviews</h3>
+                    {reviewData.comments.map(review=>{
+                        const reaction=reviewReaction[review.id]
+
+                        const helpfulCount=review.helpful+(reaction === 'like'?1:0)
+
+                        const notHelpfulCount=(review.notHelpful ||0)+(reaction==='dislike'?1:0);
+
+                        return(
+
+                            <article className="review-card" key={review.id}>
+                                <div className="review-header">
+                                    <strong>{review.name}</strong>
+                                    <span>{review.date}</span>
+                                </div>
+                                <div className="review-title-row">
+                                    <RatingStars
+                                        rating={review.rating}
+                                        color={getRatingColor(review.rating)}
+                                    />
+                                    <h4>
+                                        {review.title}
+                                    </h4>
+                                </div>
+                                <p className="review-comment">
+                                    {review.comment}
+                                </p>
+
+                                <div className="review-actions">
+                                    <button
+                                        className={reaction ==='like'?'selected':''}
+                                        onClick={()=>handleReviewReaction(review.id,'like')}
+                                    >
+                                        👍 Helpful ({helpfulCount})
+                                    </button>
+
+                                    <button
+                                        className={reaction==='dislike'?'selected':''}
+                                        onClick={()=>handleReviewReaction(review.id,'dislike')}
+                                    >
+                                    👎 Not helpful ({notHelpfulCount})
+                                    </button>
+
+                                    <button
+                                        onClick={()=>setReplyOpen(
+                                            prev=>({
+                                                ...prev,
+                                                [review.id]:!prev[review.id]
+                                            })
+                                        )}
+                                    >
+                                        Reply
+                                    </button>
+                                </div>
+                                {replyOpen[review.id] &&(
+                                    <div className="review-reply">
+                                        <textarea 
+                                            placeholder="Write your reply..."
+                                            value={replyTexts[review.id]||''}
+                                            onChange={e=>setReplyTexts(
+                                                prev=>({
+                                                    ...prev,
+                                                    [review.id]:e.target.value
+                                                })
+                                            )}
+
+                                           
+                                        />
+                                         <button
+                                            disabled={!replyTexts[review.id]?.trim()}
+                                            onClick={()=>{
+                                                setPostedReplies(prev=>({
+                                                    ...prev,
+                                                    [review.id]:[
+                                                        ...(prev[review.id]||[]),
+                                                        replyTexts[review.id].trim()
+                                                    ]
+                                                }));
+                                                setReplyTexts(prev=>({
+                                                    ...prev,
+                                                    [review.id]:''
+                                                }));
+
+                                                setReplyOpen(prev=>({
+                                                    ...prev,
+                                                    [review.id]:false
+                                                }));
+                                            }}
+                                         >
+                                              Post Reply
+
+                                         </button>
+
+                                    </div>
+                                )}
+                                {postedReplies[review.id]?.map((reply,index)=>(
+                                    <div className="posted-reply" key={index}>
+                                        <strong>Your Reply</strong>
+                                        <p>{reply}</p>
+                                    </div>
+                                ))}
+                            </article>
+                        )
+                    })}
                 </div>
             </section>
         </div>

@@ -280,7 +280,7 @@ background: #F0EEF4;
 .rating-overview{
     text-align: center;
 }
-.rating-overview h2{
+.rating-overview h3{
     font-size: 48px;
     margin-bottom: 8px;
     color: var(--color-dark);
@@ -292,16 +292,16 @@ background: #F0EEF4;
 }
 .rating-stars{
     display: flex;
-    gap: 3px;
+  gap: 3px;
    font-size: 23px;
     letter-spacing: 3px;
-
+justify-content: center;
 }
 .rating-star{
     position: relative;
     display: inline-block;
     color: #D9D9D9;
-}
+} 
 .rating-star-fill {
     position: absolute;
     top: 0;
@@ -311,6 +311,7 @@ background: #F0EEF4;
     overflow: hidden;
     color: inherit;
     white-space: nowrap;
+
 }
 .rating-breakdown{
     display: flex;
@@ -338,6 +339,158 @@ background: #F0EEF4;
     border-radius: 10px;
     
 }
+/* review sections */
+.review-list{
+    margin-top:40px ;
+}
+
+.review-list > h3{
+    font-size: 20px;
+    color: var(--color-dark);
+    margin-bottom:20px ;
+}
+
+.review-card{
+    padding: 22px 0;
+    border-top: 1px solid #EEEAE3;
+}
+
+.review-header{
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom:15px ;
+}
+
+.review-header strong{
+    color: var(--color-dark);
+    font-size: 15px;
+}
+
+.review-header span{
+    color: #999;
+    font-size: 13px;
+}
+.review-title-row{
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: 12px;
+}
+
+.review-title-row  .rating-stars{
+    font-size: 17px;
+}
+
+.review-title-row h4{
+    margin: 0;
+    font-size: 15px;
+    color: var(--color-dark);
+}
+
+.review-comment{
+    margin: 14px 0;
+    color: #666;
+    font-size: 14px;
+    line-height: 1.7;
+}
+.review-actions{
+    display: flex;
+    flex-wrap: wrap;
+    gap: 18px;
+}
+
+.review-actions  button{
+    border: none;
+    background: transparent;
+     color: #777481;
+     padding: 5px 0;
+     font-size: 13px;
+     cursor: pointer;
+}
+
+.review-actions button:hover,.review-actions button.selected{
+    color: var(--color-primary);
+}
+
+.review-reply{
+    margin: 18px;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+}
+.review-reply textarea{
+    width: 100%;
+    min-height: 80px;
+    padding: 12px;
+    border: 1px solid #E5E0EB;
+    border-radius: 8px;
+    resize: vertical;
+    font: inherit;
+}
+
+.review-reply button{
+    padding: 10px 20px;
+    color:var(--color-primary);
+    
+    background: var(--color-primary);
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+}
+.review-reply button:disabled{
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.posted-reply {
+    margin: 15px 0 0 20px;
+    padding: 14px;
+    background: #F5F2EC;
+    border-radius: 8px;
+}
+
+.posted-reply strong {
+    font-size: 13px;
+    color: var(--color-dark);
+}
+
+.posted-reply p {
+    margin: 7px 0 0;
+    font-size: 14px;
+    color: #666;
+}
+
+
+@media(max-width:991px){
+    .product-detail-page{
+        padding: 45px 0;
+    }
+    .product-detail-layout{
+        gap: 28px;
+    }
+    .product-detail-image{
+        min-height: 380px;
+    }
+    .product-detail-image img{
+        height: 380px;
+    }
+    .product-detail-info{
+        padding: 25px;
+    }
+
+    .product-detail-info h1{
+        font-size: 28px;
+    }
+    .product-detail-info h2{
+        font-size: 24px;
+    }
+
+
+}
+
+
 @media (max-width:768px){
     .product-detail-page{
         padding: 35px 0;
@@ -347,18 +500,25 @@ background: #F0EEF4;
         gap: 30px;
     }
     .product-detail-image{
-        min-height: 320px;
+        min-height: 350px;
     }
       .product-detail-image img {
-        height: 320px;
+        height: 350px;
     }
 
+    .product-detail-info{
+        padding: 28px;
+    }
     .product-detail-info h1 {
         font-size: 27px;
     }
+    .product-detail-info h2 {
+        font-size: 24px;
+    }
+
       .product-thumbnail {
-        width: 70px;
-        height: 70px;
+        width: 75px;
+        height: 75px;
     }
     .product-extra-details {
         margin-top: 40px;
@@ -372,5 +532,146 @@ background: #F0EEF4;
     .specification-row {
         font-size: 14px;
         
+    }
+    .rating-summary{
+        grid-template-columns: 1fr;
+        gap: 30px;
+    }
+    .rating-overview h3{
+        font-size: 40px;
+    }
+    .product-reviews{
+        padding: 22px 18px;
+    }
+
+    .review-header {
+    gap: 12px;
+     .rating-bar-row {
+        grid-template-columns: 40px minmax(0, 1fr) 30px;
+        gap: 8px;
+        font-size: 13px;
+    }
+
+    .review-header {
+        align-items: flex-start;
+    }
+
+    .review-reply {
+        margin-left: 0;
+        margin-right: 0;
+    }
+}
+
+.review-actions {
+    gap: 14px;
+}
+}
+@media (max-width: 480px) {
+    .product-detail-page {
+        padding: 25px 0;
+    }
+
+    .product-detail-layout {
+        gap: 22px;
+    }
+
+    .product-detail-image {
+        min-height: 280px;
+    }
+
+    .product-detail-image img {
+        height: 280px;
+        padding: 15px;
+    }
+
+    .product-detail-info {
+        padding: 20px;
+    }
+
+    .product-detail-info h1 {
+        font-size: 23px;
+        margin-bottom: 14px;
+    }
+
+    .product-detail-info h2 {
+        font-size: 22px;
+        margin-bottom: 18px;
+    }
+
+    .product-detail-info p {
+        font-size: 14px;
+    }
+
+    .product-quantity {
+        margin-top: 22px;
+    }
+
+    .add-to-cart-btn {
+        max-width: 100%;
+    }
+
+    .product-thumbnail {
+        width: 65px;
+        height: 65px;
+    }
+
+    .product-thumbnails {
+        gap: 9px;
+    }
+    .product-reviews > h2 {
+        font-size: 20px;
+        margin-bottom: 24px;
+    }
+
+    .rating-overview h3 {
+        font-size: 38px;
+    }
+
+    .rating-stars {
+        font-size: 20px;
+    }
+
+    .rating-breakdown {
+        gap: 10px;
+    }
+
+    .review-title-row {
+        gap: 8px;
+    }
+
+    .review-comment {
+        font-size: 13px;
+    }
+
+    .specification-row {
+        align-items: flex-start;
+        gap: 12px;
+    }
+
+    .specification-row strong {
+        max-width: 60%;
+    }
+}
+
+/* Very small mobile phones */
+@media (max-width: 360px) {
+    .product-detail-image {
+        min-height: 240px;
+    }
+
+    .product-detail-image img {
+        height: 240px;
+    }
+
+    .product-detail-info {
+        padding: 16px;
+    }
+
+    .product-detail-info h1 {
+        font-size: 21px;
+    }
+
+    .quantity-controls {
+        gap: 14px;
     }
 }

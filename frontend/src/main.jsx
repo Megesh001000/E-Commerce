@@ -5,10 +5,13 @@ import './index.css'
 import App from './App.jsx'
 import 'bootstrap/dist/css/bootstrap.min.css'
 
+import { WishlistProvider } from './context/WishlistContext'
 createRoot(document.getElementById('root')).render(
   <StrictMode>
     <BrowserRouter>
-      <App />
+       <WishlistProvider>
+        <App />
+      </WishlistProvider>
     </BrowserRouter>
   </StrictMode>,
 )
